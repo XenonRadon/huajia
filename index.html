@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>华足辅助工具</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { text-align: center; font-family: sans-serif; margin-top: 10vh; }
+        h1 { color: #333; }
+        #result { font-size: 64px; font-weight: bold; margin: 30px; color: #d32f2f; }
+        
+        .main-btn { font-size: 24px; padding: 12px 40px; cursor: pointer; border-radius: 8px; border: 1px solid #ccc; background-color: #f9f9f9; }
+        .main-btn:hover { background-color: #e0e0e0; }
+        .main-btn:disabled { background-color: #eee; color: #aaa; cursor: not-allowed; }
+        
+        .small-btn { font-size: 16px; padding: 6px 15px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc; background-color: #eee; vertical-align: middle; margin-left: 15px; }
+        .small-btn:hover { background-color: #ddd; }
+        .btn-warning { background-color: #ffeb3b; border-color: #fbc02d; }
+        .btn-warning:hover { background-color: #fdd835; }
+
+        #login-section { margin-top: 15vh; }
+        .input-box { font-size: 20px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; margin-bottom: 20px; width: 250px; text-align: center; }
+        
+        /* 两个不同的弹窗共用遮罩样式 */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.5); justify-content: center; align-items: center;
+        }
+        .modal-box {
+            background: white; padding: 30px 50px; border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center;
+        }
+        .modal-box p { font-size: 24px; margin-top: 0; margin-bottom: 25px; }
+        .modal-btn { font-size: 18px; padding: 8px 30px; margin: 0 15px; cursor: pointer; border-radius: 6px; border: none; }
+        .btn-yes { background-color: #4CAF50; color: white; }
+        .btn-yes:hover { background-color: #45a049; }
+        .btn-no { background-color: #f44336; color: white; }
+        .btn-no:hover { background-color: #da190b; }
+
+        #history-container {
+            margin-top: 60px; padding: 20px; width: 80%;
+            margin-left: auto; margin-right: auto; border-top: 1px dashed #ccc;
+        }
+        #history-title { font-size: 16px; color: #666; margin-bottom: 15px; }
+        
+        .history-row { font-size: 22px; margin-bottom: 12px; line-height: 1.6; }
+        .history-user { font-weight: bold; color: #333; }
+        .history-item { margin: 0 5px; font-weight: bold; }
+        .history-gray { color: #a0a0a0; }
+        .history-black { color: #000000; }
+        
+        #system-status { color: #888; font-size: 14px; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+    <div id="login-section">
+        <h1 style="margin-bottom: 40px;">欢迎使用抽签系统</h1>
+        <input type="text" id="username-input" class="input-box" placeholder="请输入您的用户名" onkeydown="checkEnter(event)"><br>
+        <input type="password" id="password-input" class="input-box" placeholder="密码 (未设置则留空)" onkeydown="checkEnter(event)"><br>
+        <button class="main-btn" id="login-btn" onclick="login()">登 录</button>
+        <div id="system-status">正在连接数据库...</div>
+    </div>
+
+    <div id="draw-section" style="display: none;">
+        <h1>抽外籍 
+            <span id="current-user-display" style="font-size: 20px; color: #1976d2; font-weight: normal; margin-left: 10px;"></span> 
+            <button class="small-btn" onclick="logout()">切换用户</button>
+            <button class="small-btn btn-warning" id="set-pwd-btn" style="display: none;" onclick="showPwdModal()">设置密码</button>
+        </h1>
+        
+        <div id="result">等待中...</div>
+        <button class="main-btn" id="draw-btn" onclick="showDrawModal()">抽！</button>
+
+        <div id="history-container">
+            <div id="history-title">已抽记录（每人生效的为黑色，已放弃的为灰色）：</div>
+            <div id="history-list">加载中...</div>
+        </div>
+    </div>
+
+    <div id="draw-modal-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <p id="draw-modal-text">是否确认重抽？</p>
+            <button class="modal-btn btn-yes" onclick="confirmDraw()">是</button>
+            <button class="modal-btn btn-no" onclick="hideDrawModal()">否</button>
+        </div>
+    </div>
+
+    <div id="pwd-modal-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <p>请设置您的专属密码</p>
+            <input type="password" id="new-password-input" class="input-box" style="width: 80%;" placeholder="请输入新密码">
+            <br>
+            <button class="modal-btn btn-yes" id="save-pwd-btn" onclick="confirmSetPwd()">保存</button>
+            <button class="modal-btn btn-no" onclick="hidePwdModal()">取消</button>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. Supabase 项目配置
+        // ==========================================
+        const SUPABASE_URL = 'https://rqpqgpckotosjuiiqkit.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_iWPs_iamFCLEaDAOpmkLyw_eIXf7YBx';
+        
+        const { createClient } = window.supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // 业务逻辑变量
+        const options = ["帝俊","共工","女娲","精卫","夸父","东皇太一","盘古","貂蝉","祝融夫人","潘凤","黄月英","孙尚香","张星彩","关银屏","吕玲绮","卢俊义","史文恭","鲁智深","关胜","李逵","公孙胜","栾廷玉","张顺","邓元觉","琼英","石秀","石宝","张清","戴宗","武松","呼延灼","杨志","花荣","刘唐","时迁","李俊","林冲","庞万春","宋江","燕顺","朱贵","李应","王庆","王英","吴用","王伦","史进","如来","孙悟空","太白金星","牛魔王","玉皇大帝","千里眼","顺风耳","猪八戒","黑熊精","铁扇公主","沙僧","唐僧","巨灵神","白龙马","王熙凤","焦大","林黛玉","贾兰","贾母","柳湘莲","通天教主","闻仲","元始天尊","哪吒","杨戬","惧留孙","广成子","南宫适","罗宣","敖丙","崇黑虎","孔宣","魔礼青","苏妲己","余化","常昊","土行孙","申公豹","苏护","赤精子","黄天化","陆压","魔礼寿","吴龙","杨任","戴礼","雷震子","太乙真人","韦护","赵公明","姜文焕","袁洪","黄飞虎","金吒","魔礼海","木吒","殷洪","殷郊","姜桓楚","金大升","魔礼红","邓婵玉","殷破败","余化龙","朱子真","邬文化","杨显","杨业","王兰英","杨衮","杨宗保","杨延昭","杜金娥","杨延辉","花解语","耶律金娥","金玉荣","杨延平","杨延嗣","穆桂英","佘赛花","织田信长","丰臣秀吉","德川家康","武田信玄","毛利元就","北条氏康","上杉谦信","岛津义久","长宗我部元亲","伊达政宗","细川政元","三好长庆","大友宗麟","大内义兴","尼子经久","龙造寺隆信","今川义元","足利义昭","六角定赖","芦名盛氏","最上义光","本愿寺显如","柴田胜家","足利成氏","佐竹义重","宇喜多秀家","山名宗全","石田三成","本多忠胜","真田昌幸","王重阳","黄药师","欧阳锋","洪七公","段智兴","郭靖","周伯通","黄蓉","裘千仞","梅超风","完颜洪烈","独孤求败","林朝英","金轮法王","小龙女","杨过","李莫愁","郭襄","张无忌","张三丰","谢逊","殷天正","杨逍","赵敏","范遥","周芷若","韦一笑","小昭","杨不悔","胡青牛","殷离","黛绮丝","彭莹玉","花木兰","白素贞","夏雪宜","楚留香","师妃暄","寇仲","徐子陵","陈丽卿","李寻欢","聂风","步惊云","宁采臣","叶孤城","花满楼","陈近南","韦小宝","红拂女","杨林","高宠","罗成","阿朱","虞子期","石破天","东方不败","冲虚道长","李元霸","宇文成都","薛丁山","樊梨花"];
+        let currentUser = "";
+        let historyRecords = [];
+        let hasPassword = false;
+
+        // 页面加载时自动连接数据库并获取初始数据
+        window.onload = async () => {
+            await fetchHistory();
+            setupRealtime(); 
+            document.getElementById("system-status").innerText = "数据库连接成功，可以登录。";
+        };
+
+        // ==========================================
+        // 2. 数据库交互与实时监听
+        // ==========================================
+        async function fetchHistory() {
+            const { data, error } = await supabaseClient
+                .from('draw_history')
+                .select('*')
+                .order('created_at', { ascending: true }); 
+
+            if (error) {
+                console.error("读取数据失败:", error);
+                document.getElementById("system-status").innerText = "数据库连接失败，请检查配置。";
+                return;
+            }
+
+            historyRecords = data.map(row => ({
+                user: row.username,
+                draw: row.draw_name
+            }));
+            renderHistory();
+        }
+
+        function setupRealtime() {
+            supabaseClient
+                .channel('public:draw_history')
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'draw_history' }, payload => {
+                    const newRecord = payload.new;
+                    historyRecords.push({ user: newRecord.username, draw: newRecord.draw_name });
+                    renderHistory();
+                })
+                .subscribe();
+        }
+
+        // ==========================================
+        // 3. 登录与密码逻辑
+        // ==========================================
+        async function login() {
+            const inputUser = document.getElementById("username-input").value.trim();
+            const inputPwd = document.getElementById("password-input").value.trim();
+            
+            if (!inputUser) {
+                alert("用户名不能为空，请输入您的姓名！");
+                return;
+            }
+
+            const loginBtn = document.getElementById("login-btn");
+            const statusDiv = document.getElementById("system-status");
+            
+            loginBtn.disabled = true;
+            statusDiv.innerText = "正在验证登录信息...";
+
+            // 查询密码表
+            const { data, error } = await supabaseClient
+                .from('user_passwords')
+                .select('password')
+                .eq('username', inputUser)
+                .maybeSingle();
+
+            loginBtn.disabled = false;
+            statusDiv.innerText = "";
+
+            if (error) {
+                console.error("验证密码失败:", error);
+                alert("网络错误或密码表未配置，请稍后重试！");
+                return;
+            }
+
+            if (data) {
+                // 用户已设置过密码
+                if (data.password !== inputPwd) {
+                    alert("密码错误，请重新输入！");
+                    return;
+                }
+                hasPassword = true;
+            } else {
+                // 用户未设置过密码
+                hasPassword = false;
+            }
+
+            // 验证通过，进入系统
+            currentUser = inputUser;
+            document.getElementById("login-section").style.display = "none";
+            document.getElementById("draw-section").style.display = "block";
+            
+            document.getElementById("current-user-display").innerText = `(当前操作人: ${currentUser})`;
+            document.getElementById("result").innerText = "等待中...";
+
+            // 控制“设置密码”按钮的显示
+            document.getElementById("set-pwd-btn").style.display = hasPassword ? "none" : "inline-block";
+        }
+
+        function logout() {
+            document.getElementById("login-section").style.display = "block";
+            document.getElementById("draw-section").style.display = "none";
+            document.getElementById("username-input").value = ""; 
+            document.getElementById("password-input").value = ""; 
+            currentUser = "";
+            hasPassword = false;
+        }
+
+        function checkEnter(event) {
+            if (event.key === "Enter") {
+                login();
+            }
+        }
+
+        // --- 设置密码相关弹窗 ---
+        function showPwdModal() {
+            document.getElementById("new-password-input").value = "";
+            document.getElementById("pwd-modal-overlay").style.display = "flex";
+        }
+
+        function hidePwdModal() {
+            document.getElementById("pwd-modal-overlay").style.display = "none";
+        }
+
+        async function confirmSetPwd() {
+            const newPwd = document.getElementById("new-password-input").value.trim();
+            if (!newPwd) {
+                alert("密码不能为空！");
+                return;
+            }
+
+            const saveBtn = document.getElementById("save-pwd-btn");
+            saveBtn.disabled = true;
+            saveBtn.innerText = "保存中...";
+
+            const { error } = await supabaseClient
+                .from('user_passwords')
+                .insert([{ username: currentUser, password: newPwd }]);
+
+            saveBtn.disabled = false;
+            saveBtn.innerText = "保存";
+
+            if (error) {
+                console.error("保存密码失败:", error);
+                alert("保存密码失败，可能是网络问题。");
+                return;
+            }
+
+            alert("密码设置成功！下次登录需使用该密码。");
+            hasPassword = true;
+            hidePwdModal();
+            document.getElementById("set-pwd-btn").style.display = "none";
+        }
+
+        // ==========================================
+        // 4. 抽签核心逻辑
+        // ==========================================
+        function showDrawModal() {
+            const hasCurrentUserDrawn = historyRecords.some(record => record.user === currentUser);
+            const modalText = hasCurrentUserDrawn ? "是否确认重抽？" : "是否确认开始抽签？";
+            
+            document.getElementById("draw-modal-text").innerText = modalText;
+            document.getElementById("draw-modal-overlay").style.display = "flex";
+        }
+
+        function hideDrawModal() {
+            document.getElementById("draw-modal-overlay").style.display = "none";
+        }
+
+        async function confirmDraw() {
+            hideDrawModal();
+            
+            const drawBtn = document.getElementById("draw-btn");
+            drawBtn.disabled = true;
+            document.getElementById("result").innerText = "抽取中...";
+
+            const latestDrawsMap = {};
+            historyRecords.forEach(record => {
+                latestDrawsMap[record.user] = record.draw; 
+            });
+
+            const unavailableOptions = [];
+            for (const user in latestDrawsMap) {
+                if (user !== currentUser) { 
+                    unavailableOptions.push(latestDrawsMap[user]);
+                }
+            }
+
+            const availableOptions = options.filter(opt => !unavailableOptions.includes(opt));
+
+            if (availableOptions.length === 0) {
+                alert("所有的签都已经被其他用户占用了，无法再抽！");
+                document.getElementById("result").innerText = "无可用签";
+                drawBtn.disabled = false;
+                return;
+            }
+
+            const randomIndex = Math.floor(Math.random() * availableOptions.length);
+            const drawnName = availableOptions[randomIndex];
+
+            const { error } = await supabaseClient
+                .from('draw_history')
+                .insert([{ username: currentUser, draw_name: drawnName }]);
+
+            if (error) {
+                console.error("写入失败:", error);
+                alert("网络错误，抽签结果保存失败，请重试！");
+                document.getElementById("result").innerText = "等待中...";
+                drawBtn.disabled = false;
+                return;
+            }
+
+            document.getElementById("result").innerText = drawnName;
+            await fetchHistory();
+            drawBtn.disabled = false;
+        }
+
+        function renderHistory() {
+            const listDiv = document.getElementById("history-list");
+            listDiv.innerHTML = ""; 
+
+            if (historyRecords.length === 0) {
+                listDiv.innerText = "暂无记录";
+                return;
+            }
+
+            const userDrawsMap = {};
+            historyRecords.forEach(record => {
+                if (!userDrawsMap[record.user]) {
+                    userDrawsMap[record.user] = [];
+                }
+                userDrawsMap[record.user].push(record.draw);
+            });
+
+            for (const user in userDrawsMap) {
+                const rowDiv = document.createElement("div");
+                rowDiv.className = "history-row";
+
+                const userSpan = document.createElement("span");
+                userSpan.className = "history-user";
+                userSpan.innerText = `${user}：`;
+                rowDiv.appendChild(userSpan);
+
+                const draws = userDrawsMap[user];
+                for (let i = 0; i < draws.length; i++) {
+                    const drawSpan = document.createElement("span");
+                    drawSpan.innerText = draws[i];
+                    drawSpan.className = "history-item ";
+                    
+                    if (i === draws.length - 1) {
+                        drawSpan.className += "history-black";
+                    } else {
+                        drawSpan.className += "history-gray";
+                    }
+
+                    rowDiv.appendChild(drawSpan);
+
+                    if (i < draws.length - 1) {
+                        const commaNode = document.createTextNode("  ");
+                        rowDiv.appendChild(commaNode);
+                    }
+                }
+                listDiv.appendChild(rowDiv);
+            }
+        }
+    </script>
+</body>
+</html>
