@@ -218,6 +218,13 @@
             <button class="modal-btn btn-no" onclick="hidePwdModal()">取消</button>
         </div>
     </div>
+	
+	<div id="no-pwd-modal-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <p>您未设置密码，请尽快设置密码</p>
+            <button class="modal-btn btn-yes" onclick="closeNoPwdModal()">确认</button>
+        </div>
+    </div>
 
     <script>
         // ==========================================
@@ -261,7 +268,7 @@
         async function fetchOptions() {
             const { data, error } = await supabaseClient
                 .from('characters_pool') 
-                .select('num, name, fengge, position, cost'); 
+                .select('num, name, fengge, position, cost, available');
 
             if (error) {
                 console.error("读取抽签选项失败:", error);
@@ -507,6 +514,10 @@
             document.getElementById("set-pwd-btn").style.display = hasPassword ? "none" : "inline-block";
 
             updateBanDisplay();
+			
+			if (!hasPassword) {
+                document.getElementById("no-pwd-modal-overlay").style.display = "flex";
+            }
         }
 
         function logout() {
@@ -535,6 +546,11 @@
 
         function hidePwdModal() {
             document.getElementById("pwd-modal-overlay").style.display = "none";
+        }
+		
+		// 关闭未设置密码的提示弹窗
+        function closeNoPwdModal() {
+            document.getElementById("no-pwd-modal-overlay").style.display = "none";
         }
 
         async function confirmSetPwd() {
@@ -611,7 +627,9 @@
                 }
             }
 
-            let availableOptions = options.filter(opt => !unavailableOptions.includes(opt.name));
+            // 在这里加上 opt.available !== false 的判断
+            // 使用 !== false 是为了兼容如果数据库中有 null 值的历史数据也能被正常抽取
+            let availableOptions = options.filter(opt => opt.available !== false && !unavailableOptions.includes(opt.name));
 
             if (activeBanStyle) {
                 availableOptions = availableOptions.filter(opt => opt.fengge !== activeBanStyle);
