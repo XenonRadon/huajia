@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>抽外籍系统</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/draw.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div style="text-align: left; padding: 10px 20px;">
+        <button class="small-btn" onclick="window.location.href='menu.html'">← 返回主菜单</button>
+    </div>
+
+    <div id="draw-section">
+        <h1>抽外籍 
+            <span id="current-user-display" style="font-size: 20px; color: #1976d2; font-weight: normal; margin-left: 10px;"></span> 
+            <button class="small-btn" onclick="logout()">切换用户</button>
+            <button class="small-btn btn-warning" id="set-pwd-btn" style="display: none;" onclick="showPwdModal()">设置密码</button>
+        </h1>
+        
+        <div id="result">读取数据中...</div>
+        
+        <div style="position: relative; display: inline-block;">
+            <button class="main-btn" id="draw-btn" onclick="showDrawModal()" disabled>抽！</button>
+            <button class="main-btn btn-ext" id="ext-btn" onclick="showExtModal()" style="position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 20px; white-space: nowrap;">扩展功能</button>
+        </div>
+
+        <div id="ban-display-area">
+            <div id="ban-style-display" class="ban-item" style="display: none;">
+                已BAN风格：<span id="ban-style-text"></span>
+                <button class="small-btn" style="padding: 2px 8px; margin-left: 10px; font-size: 14px;" onclick="clearBan('style')">取消</button>
+            </div>
+            <div id="ban-position-display" class="ban-item" style="display: none;">
+                已BAN注册：<span id="ban-position-text"></span>
+                <button class="small-btn" style="padding: 2px 8px; margin-left: 10px; font-size: 14px;" onclick="clearBan('position')">取消</button>
+            </div>
+            <div id="ban-double-display" class="ban-item" style="display: none;">
+                一次抽两个
+                <button class="small-btn" id="btn-clear-double" style="padding: 2px 8px; margin-left: 10px; font-size: 14px;" onclick="clearBan('double')">取消</button>
+            </div>
+            <div id="ban-cost-display" class="ban-item" style="display: none;">
+                <span id="ban-cost-text"></span>
+                <button class="small-btn" id="btn-clear-cost" style="padding: 2px 8px; margin-left: 10px; font-size: 14px;" onclick="clearBan('cost')">取消</button>
+            </div>
+        </div>
+
+        <div id="history-container">
+            <div id="history-title">已抽记录（每人生效的为黑色，已放弃的为灰色）：</div>
+            <div id="history-list">加载中...</div>
+        </div>
+    </div>
+
+    <div id="draw-modal-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <p id="draw-modal-text">是否确认重抽？</p>
+            <button class="modal-btn btn-yes" onclick="confirmDraw()">是</button>
+            <button class="modal-btn btn-no" onclick="hideDrawModal()">否</button>
+        </div>
+    </div>
+
+    <div id="ext-modal-overlay" class="modal-overlay">
+        <div class="modal-box" style="text-align: left;">
+            <p style="text-align: center;">扩展功能</p>
+            <div style="margin-bottom: 20px; font-size: 18px;">
+                <label style="cursor: pointer;">
+                    <input type="checkbox" id="chk-ban-style" onchange="toggleBanInput('style')" style="width: 18px; height: 18px; vertical-align: middle;"> 
+                    <span style="vertical-align: middle;">BAN风格</span>
+                </label>
+                <select id="input-ban-style" class="input-box" style="width: 160px; display: none; margin: 0 0 0 15px; padding: 5px; font-size: 16px; vertical-align: middle;">
+                    <option value="" disabled selected>请选择风格</option>
+                    <option value="无风格">无风格</option>
+                    <option value="目标中锋">目标中锋</option>
+                    <option value="偷猎者">偷猎者</option>
+                    <option value="禁区之狐">禁区之狐</option>
+                    <option value="虚假跑位">虚假跑位</option>
+                    <option value="影子前锋">影子前锋</option>
+                    <option value="高产翼锋">高产翼锋</option>
+                    <option value="自由侧翼">自由侧翼</option>
+                    <option value="创意指挥官">创意指挥官</option>
+                    <option value="传统10号位置">传统10号位置</option>
+                    <option value="传中专家">传中专家</option>
+                    <option value="全能中场">全能中场</option>
+                    <option value="指挥官">指挥官</option>
+                    <option value="破坏型中场">破坏型中场</option>
+                    <option value="靠山">靠山</option>
+                    <option value="迭瓦式终结者">迭瓦式终结者</option>
+                    <option value="进攻型后卫">进攻型后卫</option>
+                    <option value="防守型后卫">防守型后卫</option>
+                    <option value="额外前锋">额外前锋</option>
+                    <option value="建立">建立</option>
+                    <option value="进攻型守门员">进攻型守门员</option>
+                    <option value="防守型守门员">防守型守门员</option>
+                    </select>
+            </div>
+            <div style="margin-bottom: 20px; font-size: 18px;">
+                <label style="cursor: pointer;">
+                    <input type="checkbox" id="chk-ban-position" onchange="toggleBanInput('position')" style="width: 18px; height: 18px; vertical-align: middle;"> 
+                    <span style="vertical-align: middle;">BAN注册</span>
+                </label>
+                <select id="input-ban-position" class="input-box" style="width: 160px; display: none; margin: 0 0 0 15px; padding: 5px; font-size: 16px; vertical-align: middle;">
+                    <option value="" disabled selected>请选择位置</option>
+                    <option value="CF">CF</option>
+                    <option value="SS">SS</option>
+                    <option value="LF">LF</option>
+                    <option value="RF">RF</option>
+                    <option value="AM">AM</option>
+                    <option value="LM">LM</option>
+                    <option value="RM">RM</option>
+                    <option value="CM">CM</option>
+                    <option value="DM">DM</option>
+                    <option value="LB">LB</option>
+                    <option value="RB">RB</option>
+                    <option value="CB">CB</option>
+                    <option value="GK">GK</option>
+                    </select>
+            </div>
+            <div style="margin-bottom: 20px; font-size: 18px;">
+                <label style="cursor: pointer;">
+                    <input type="checkbox" id="chk-ban-double" style="width: 18px; height: 18px; vertical-align: middle;"> 
+                    <span style="vertical-align: middle;">一次抽两个</span>
+                </label>
+            </div>
+            <div style="margin-bottom: 30px; font-size: 18px;">
+                <label style="cursor: pointer;">
+                    <input type="checkbox" id="chk-ban-cost" onchange="toggleBanInput('cost')" style="width: 18px; height: 18px; vertical-align: middle;"> 
+                    <span style="vertical-align: middle;">X费之前免费</span>
+                </label>
+                <select id="input-ban-cost" class="input-box" style="width: 160px; display: none; margin: 0 0 0 15px; padding: 5px; font-size: 16px; vertical-align: middle;">
+                    <option value="" disabled selected>请选择费用</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                </select>
+            </div>
+            <div style="text-align: center;">
+                <button class="modal-btn btn-yes" onclick="saveExtFeatures()">确定</button>
+                <button class="modal-btn btn-no" onclick="hideExtModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="pwd-modal-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <p>请设置您的专属密码</p>
+            <input type="password" id="new-password-input" class="input-box" style="width: 80%;" placeholder="请输入新密码">
+            <br>
+            <button class="modal-btn btn-yes" id="save-pwd-btn" onclick="confirmSetPwd()">保存</button>
+            <button class="modal-btn btn-no" onclick="hidePwdModal()">取消</button>
+        </div>
+    </div>
+	
+	<div id="no-pwd-modal-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <p>您未设置密码，请尽快设置密码</p>
+            <button class="modal-btn btn-yes" onclick="closeNoPwdModal()">确认</button>
+        </div>
+    </div>
+
+    <script src="js/supabase-init.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/draw.js"></script>
+</body>
+</html>
