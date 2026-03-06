@@ -1,0 +1,13 @@
+#result { font-size: 64px; font-weight: bold; margin: 30px; color: #d32f2f; }
+#ban-display-area { margin-top: 25px; font-size: 18px; font-weight: bold; }
+.ban-item { display: inline-block; margin: 5px 15px; padding: 8px 15px; background-color: #ffebee; color: #c62828; border-radius: 8px; border: 1px solid #ffcdd2; }
+#ban-position-display { background-color: #e8f5e9; color: #2e7d32; border-color: #c8e6c9; }
+#ban-double-display { background-color: #fff3e0; color: #ef6c00; border-color: #ffe0b2; }
+#ban-cost-display { background-color: #e3f2fd; color: #1565c0; border-color: #90caf9; }
+#history-container { margin-top: 40px; padding: 20px; width: 80%; margin-left: auto; margin-right: auto; border-top: 1px dashed #ccc; }
+#history-title { font-size: 16px; color: #666; margin-bottom: 15px; }
+.history-row { font-size: 22px; margin-bottom: 12px; line-height: 1.6; }
+.history-user { font-weight: bold; color: #333; }
+.history-item { margin: 0 5px; font-weight: bold; }
+.history-gray { color: #a0a0a0; }
+.history-black { color: #000000; }
