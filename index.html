@@ -44,12 +44,13 @@
         #ban-display-area { margin-top: 25px; font-size: 18px; font-weight: bold; }
         .ban-item { display: inline-block; margin: 5px 15px; padding: 8px 15px; background-color: #ffebee; color: #c62828; border-radius: 8px; border: 1px solid #ffcdd2; }
 
-        /* 【修改点】：将BAN注册的提示框改为绿色调 */
-        #ban-position-display {
-            background-color: #e8f5e9; 
-            color: #2e7d32;            
-            border-color: #c8e6c9;     
-        }
+        #ban-position-display { background-color: #e8f5e9; color: #2e7d32; border-color: #c8e6c9; }
+        
+        /* 一次抽两个提示框 */
+        #ban-double-display { background-color: #fff3e0; color: #ef6c00; border-color: #ffe0b2; }
+
+        /* 费用锁定提示框 */
+        #ban-cost-display { background-color: #e3f2fd; color: #1565c0; border-color: #90caf9; }
 
         #history-container {
             margin-top: 40px; padding: 20px; width: 80%;
@@ -98,6 +99,14 @@
             <div id="ban-position-display" class="ban-item" style="display: none;">
                 已BAN注册：<span id="ban-position-text"></span>
                 <button class="small-btn" style="padding: 2px 8px; margin-left: 10px; font-size: 14px;" onclick="clearBan('position')">取消</button>
+            </div>
+            <div id="ban-double-display" class="ban-item" style="display: none;">
+                已开启：一次抽两个
+                <button class="small-btn" id="btn-clear-double" style="padding: 2px 8px; margin-left: 10px; font-size: 14px;" onclick="clearBan('double')">取消</button>
+            </div>
+            <div id="ban-cost-display" class="ban-item" style="display: none;">
+                <span id="ban-cost-text"></span>
+                <button class="small-btn" id="btn-clear-cost" style="padding: 2px 8px; margin-left: 10px; font-size: 14px;" onclick="clearBan('cost')">取消</button>
             </div>
         </div>
 
@@ -149,7 +158,7 @@
                     <option value="防守型守门员">防守型守门员</option>
                 </select>
             </div>
-            <div style="margin-bottom: 30px; font-size: 18px;">
+            <div style="margin-bottom: 20px; font-size: 18px;">
                 <label style="cursor: pointer;">
                     <input type="checkbox" id="chk-ban-position" onchange="toggleBanInput('position')" style="width: 18px; height: 18px; vertical-align: middle;"> 
                     <span style="vertical-align: middle;">BAN注册</span>
@@ -169,6 +178,28 @@
                     <option value="RB">RB</option>
                     <option value="CB">CB</option>
                     <option value="GK">GK</option>
+                </select>
+            </div>
+            
+            <div style="margin-bottom: 20px; font-size: 18px;">
+                <label style="cursor: pointer;">
+                    <input type="checkbox" id="chk-ban-double" style="width: 18px; height: 18px; vertical-align: middle;"> 
+                    <span style="vertical-align: middle;">一次抽两个</span>
+                </label>
+            </div>
+
+            <div style="margin-bottom: 30px; font-size: 18px;">
+                <label style="cursor: pointer;">
+                    <input type="checkbox" id="chk-ban-cost" onchange="toggleBanInput('cost')" style="width: 18px; height: 18px; vertical-align: middle;"> 
+                    <span style="vertical-align: middle;">X费之前免费</span>
+                </label>
+                <select id="input-ban-cost" class="input-box" style="width: 160px; display: none; margin: 0 0 0 15px; padding: 5px; font-size: 16px; vertical-align: middle;">
+                    <option value="" disabled selected>请选择费用</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
                 </select>
             </div>
             <div style="text-align: center;">
@@ -206,16 +237,18 @@
         let historyRecords = [];
         let hasPassword = false;
         
-        let userBanStatusMap = {}; // 【新增】用于记录所有用户的 BAN 使用状态
+        let userBanStatusMap = {}; 
 
         // 扩展功能状态
         let activeBanStyle = "";
         let activeBanPosition = "";
+        let activeFreeCost = "";
+        let activeDoubleDraw = false;
 
         window.onload = async () => {
             document.getElementById("system-status").innerText = "正在加载数据库信息...";
             await fetchOptions(); 
-            await fetchUserBanStatus(); // 【新增】拉取用户 BAN 状态
+            await fetchUserBanStatus(); 
             await fetchHistory();
             setupRealtime(); 
             document.getElementById("system-status").innerText = "数据库连接成功，可以登录。";
@@ -228,7 +261,7 @@
         async function fetchOptions() {
             const { data, error } = await supabaseClient
                 .from('characters_pool') 
-                .select('num, name, fengge, position'); 
+                .select('num, name, fengge, position, cost'); 
 
             if (error) {
                 console.error("读取抽签选项失败:", error);
@@ -239,7 +272,6 @@
             options = data || [];
         }
 
-        // 【新增函数】读取用户 BAN 状态
         async function fetchUserBanStatus() {
             const { data, error } = await supabaseClient
                 .from('user_ban_status')
@@ -249,7 +281,9 @@
                 data.forEach(row => {
                     userBanStatusMap[row.username] = {
                         style: row.used_ban_style,
-                        position: row.used_ban_position
+                        position: row.used_ban_position,
+                        freeCost: row.used_free_cost,
+                        doubleDraw: row.used_double_draw 
                     };
                 });
             } else if (error) {
@@ -282,31 +316,45 @@
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'draw_history' }, async payload => {
                     const newRecord = payload.new;
                     historyRecords.push({ user: newRecord.username, draw: newRecord.draw_name });
-                    await fetchUserBanStatus(); // 【新增】发生新抽签时，刷新一下各用户的星号状态
+                    await fetchUserBanStatus(); 
                     renderHistory();
                 })
                 .subscribe();
         }
 
         // ==========================================
-        // 4. 扩展功能逻辑 (BAN风格 / BAN注册)
+        // 4. 扩展功能逻辑 (BAN风格 / BAN注册 / 免费费用 / 一次抽两个)
         // ==========================================
         function showExtModal() {
+            // BAN风格
             document.getElementById("chk-ban-style").checked = !!activeBanStyle;
-            if (activeBanStyle) {
-                document.getElementById("input-ban-style").value = activeBanStyle;
-            } else {
-                document.getElementById("input-ban-style").value = "";
-            }
+            document.getElementById("input-ban-style").value = activeBanStyle || "";
             toggleBanInput('style');
 
+            // BAN注册
             document.getElementById("chk-ban-position").checked = !!activeBanPosition;
-            if (activeBanPosition) {
-                document.getElementById("input-ban-position").value = activeBanPosition;
-            } else {
-                document.getElementById("input-ban-position").value = "";
-            }
+            document.getElementById("input-ban-position").value = activeBanPosition || "";
             toggleBanInput('position');
+
+            // 一次抽两个（自由取消）
+            document.getElementById("chk-ban-double").checked = activeDoubleDraw;
+            document.getElementById("chk-ban-double").disabled = false;
+
+            // X费之前免费（处理数据库已锁定的情况）
+            const lockedCost = userBanStatusMap[currentUser] && userBanStatusMap[currentUser].freeCost;
+            if (lockedCost) {
+                document.getElementById("chk-ban-cost").checked = true;
+                document.getElementById("chk-ban-cost").disabled = true; 
+                document.getElementById("input-ban-cost").value = lockedCost;
+                document.getElementById("input-ban-cost").disabled = true; 
+                document.getElementById("input-ban-cost").style.display = "inline-block";
+            } else {
+                document.getElementById("chk-ban-cost").disabled = false;
+                document.getElementById("chk-ban-cost").checked = !!activeFreeCost;
+                document.getElementById("input-ban-cost").disabled = false;
+                document.getElementById("input-ban-cost").value = activeFreeCost || "";
+                toggleBanInput('cost');
+            }
 
             document.getElementById("ext-modal-overlay").style.display = "flex";
         }
@@ -323,9 +371,12 @@
         function saveExtFeatures() {
             const isBanStyleChecked = document.getElementById("chk-ban-style").checked;
             const isBanPositionChecked = document.getElementById("chk-ban-position").checked;
+            const isBanDoubleChecked = document.getElementById("chk-ban-double").checked;
+            const isBanCostChecked = document.getElementById("chk-ban-cost").checked;
 
             const styleVal = document.getElementById("input-ban-style").value.trim();
             const posVal = document.getElementById("input-ban-position").value.trim();
+            const costVal = document.getElementById("input-ban-cost").value.trim();
 
             if (isBanStyleChecked && !styleVal) {
                 alert("请在下拉框中选择要BAN的风格！");
@@ -335,9 +386,20 @@
                 alert("请在下拉框中选择要BAN的注册位置！");
                 return;
             }
+            
+            const isCostLocked = userBanStatusMap[currentUser] && userBanStatusMap[currentUser].freeCost;
+            if (isBanCostChecked && !costVal && !isCostLocked) {
+                alert("请在下拉框中选择免费的费用！");
+                return;
+            }
 
             activeBanStyle = isBanStyleChecked ? styleVal : "";
             activeBanPosition = isBanPositionChecked ? posVal : "";
+            activeDoubleDraw = isBanDoubleChecked;
+
+            if (!isCostLocked) {
+                activeFreeCost = isBanCostChecked ? costVal : "";
+            }
 
             updateBanDisplay();
             hideExtModal();
@@ -346,12 +408,16 @@
         function clearBan(type) {
             if (type === 'style') activeBanStyle = "";
             if (type === 'position') activeBanPosition = "";
+            if (type === 'double') activeDoubleDraw = false;
+            if (type === 'cost') activeFreeCost = "";
             updateBanDisplay();
         }
 
         function updateBanDisplay() {
             const styleDisplay = document.getElementById("ban-style-display");
             const positionDisplay = document.getElementById("ban-position-display");
+            const doubleDisplay = document.getElementById("ban-double-display");
+            const costDisplay = document.getElementById("ban-cost-display"); 
 
             if (activeBanStyle) {
                 document.getElementById("ban-style-text").innerText = activeBanStyle;
@@ -365,6 +431,26 @@
                 positionDisplay.style.display = "inline-block";
             } else {
                 positionDisplay.style.display = "none";
+            }
+
+            // 一次抽两个（自由取消）
+            if (activeDoubleDraw) {
+                doubleDisplay.style.display = "inline-block";
+                document.getElementById("btn-clear-double").style.display = "inline-block";
+            } else {
+                doubleDisplay.style.display = "none";
+            }
+
+            // 处理费用锁定的显示
+            const lockedCost = userBanStatusMap[currentUser] && userBanStatusMap[currentUser].freeCost;
+            const displayCost = lockedCost || activeFreeCost;
+
+            if (displayCost) {
+                document.getElementById("ban-cost-text").innerText = `${displayCost}费之前免费`;
+                costDisplay.style.display = "inline-block";
+                document.getElementById("btn-clear-cost").style.display = lockedCost ? "none" : "inline-block";
+            } else {
+                costDisplay.style.display = "none";
             }
         }
 
@@ -419,6 +505,8 @@
             document.getElementById("result").innerText = "等待中...";
 
             document.getElementById("set-pwd-btn").style.display = hasPassword ? "none" : "inline-block";
+
+            updateBanDisplay();
         }
 
         function logout() {
@@ -430,6 +518,8 @@
             hasPassword = false;
             clearBan('style');
             clearBan('position');
+            clearBan('double');
+            clearBan('cost'); 
         }
 
         function checkEnter(event) {
@@ -506,13 +596,18 @@
 
             const latestDrawsMap = {};
             historyRecords.forEach(record => {
-                latestDrawsMap[record.user] = record.draw; 
+                // 对于别人抽取的包含“&”的记录，我们也需要把它拆分开，使得这两个人都变成不可选
+                const names = record.draw.split('&');
+                if (!latestDrawsMap[record.user]) {
+                    latestDrawsMap[record.user] = [];
+                }
+                latestDrawsMap[record.user] = names; 
             });
 
             const unavailableOptions = [];
             for (const user in latestDrawsMap) {
                 if (user !== currentUser) { 
-                    unavailableOptions.push(latestDrawsMap[user]);
+                    unavailableOptions.push(...latestDrawsMap[user]);
                 }
             }
 
@@ -525,16 +620,40 @@
                 availableOptions = availableOptions.filter(opt => opt.position !== activeBanPosition);
             }
 
-            if (availableOptions.length === 0) {
-                alert("根据当前过滤条件（或签已被抢光），没有符合条件的签可以抽取！");
-                document.getElementById("result").innerText = "无可用签";
-                drawBtn.disabled = false;
-                return;
-            }
+            let drawnName = "";
+            const currentStatus = userBanStatusMap[currentUser] || { style: false, position: false, doubleDraw: false, freeCost: null };
+            
+            // 是否使用抽双重功能：仅取决于当前的UI勾选状态，不强制锁定
+            const isUsingDoubleDraw = activeDoubleDraw;
 
-            const randomIndex = Math.floor(Math.random() * availableOptions.length);
-            const drawnItem = availableOptions[randomIndex];
-            const drawnName = drawnItem.name; 
+            if (isUsingDoubleDraw) {
+                if (availableOptions.length < 2) {
+                    alert("根据当前过滤条件（或签已被抢光），没有足够的签可以同时抽取两个！");
+                    document.getElementById("result").innerText = "无可用签";
+                    drawBtn.disabled = false;
+                    return;
+                }
+                // 抽第一个
+                const idx1 = Math.floor(Math.random() * availableOptions.length);
+                const drawnItem1 = availableOptions[idx1];
+                availableOptions.splice(idx1, 1); // 从可用列表中移除已抽出的
+                
+                // 抽第二个
+                const idx2 = Math.floor(Math.random() * availableOptions.length);
+                const drawnItem2 = availableOptions[idx2];
+                
+                drawnName = drawnItem1.name + "&" + drawnItem2.name;
+            } else {
+                if (availableOptions.length === 0) {
+                    alert("根据当前过滤条件（或签已被抢光），没有符合条件的签可以抽取！");
+                    document.getElementById("result").innerText = "无可用签";
+                    drawBtn.disabled = false;
+                    return;
+                }
+                const randomIndex = Math.floor(Math.random() * availableOptions.length);
+                const drawnItem = availableOptions[randomIndex];
+                drawnName = drawnItem.name; 
+            }
 
             const { error } = await supabaseClient
                 .from('draw_history')
@@ -548,27 +667,28 @@
                 return;
             }
 
-            // 【新增】判断本次抽签是否使用了BAN功能，如果是，更新到数据库
-            if (activeBanStyle || activeBanPosition) {
-                const currentStatus = userBanStatusMap[currentUser] || { style: false, position: false };
-                const newStyle = currentStatus.style || !!activeBanStyle;
-                const newPosition = currentStatus.position || !!activeBanPosition;
+            const newStyle = currentStatus.style || !!activeBanStyle;
+            const newPosition = currentStatus.position || !!activeBanPosition;
+            // 如果玩家当前或过去曾经用过双抽，保持true，以供历史记录渲染星号使用
+            const newDoubleDraw = currentStatus.doubleDraw || isUsingDoubleDraw;
+            const newFreeCost = currentStatus.freeCost || activeFreeCost || null; 
+            
+            if (newStyle !== currentStatus.style || newPosition !== currentStatus.position || newDoubleDraw !== currentStatus.doubleDraw || newFreeCost !== currentStatus.freeCost) {
+                const { error: banError } = await supabaseClient
+                    .from('user_ban_status')
+                    .upsert([{ 
+                        username: currentUser, 
+                        used_ban_style: newStyle, 
+                        used_ban_position: newPosition,
+                        used_double_draw: newDoubleDraw,
+                        used_free_cost: newFreeCost 
+                    }]);
                 
-                // 如果状态有新变化，执行 upsert 更新数据库
-                if (newStyle !== currentStatus.style || newPosition !== currentStatus.position) {
-                    const { error: banError } = await supabaseClient
-                        .from('user_ban_status')
-                        .upsert([{ 
-                            username: currentUser, 
-                            used_ban_style: newStyle, 
-                            used_ban_position: newPosition 
-                        }]);
-                    
-                    if (!banError) {
-                        userBanStatusMap[currentUser] = { style: newStyle, position: newPosition };
-                    } else {
-                        console.error("更新用户BAN状态失败:", banError);
-                    }
+                if (!banError) {
+                    userBanStatusMap[currentUser] = { style: newStyle, position: newPosition, doubleDraw: newDoubleDraw, freeCost: newFreeCost };
+                    updateBanDisplay(); 
+                } else {
+                    console.error("更新用户状态失败:", banError);
                 }
             }
 
@@ -598,24 +718,40 @@
                 const rowDiv = document.createElement("div");
                 rowDiv.className = "history-row";
 
-                // 【修改点】：动态拼接用户名和对应的红/绿星号
                 const userSpan = document.createElement("span");
                 userSpan.className = "history-user";
                 
                 let htmlContent = user;
-                const status = userBanStatusMap[user] || { style: false, position: false };
+                const status = userBanStatusMap[user] || { style: false, position: false, doubleDraw: false, freeCost: null };
+                
+                // 红色与绿色与橙黄色星号
                 if (status.style) {
                     htmlContent += `<span style="color: #c62828; margin-left: 2px;">*</span>`; 
                 }
                 if (status.position) {
                     htmlContent += `<span style="color: #2e7d32; margin-left: 2px;">*</span>`; 
                 }
+                if (status.doubleDraw) {
+                    htmlContent += `<span style="color: #ff9800; margin-left: 2px;">*</span>`; 
+                }
+                // 蓝色的数字
+                if (status.freeCost) {
+                    htmlContent += `<span style="color: #1565c0; font-weight: bold; margin-left: 2px;">${status.freeCost}</span>`;
+                }
+                
                 htmlContent += "：";
                 
                 userSpan.innerHTML = htmlContent;
                 rowDiv.appendChild(userSpan);
 
                 const draws = userDrawsMap[user];
+                
+                // 记录该玩家是否已经抽到了匹配费用的签
+                let freeConditionMet = false; 
+                
+                // 记录有效抽签数量（不带下划线的，含&也算作1次）
+                let validDrawCount = 0; 
+
                 for (let i = 0; i < draws.length; i++) {
                     const drawSpan = document.createElement("span");
                     drawSpan.innerText = draws[i];
@@ -627,6 +763,38 @@
                         drawSpan.className += "history-gray";
                     }
 
+                    // 下划线判断逻辑
+                    let shouldUnderline = false;
+                    if (status.freeCost) {
+                        // 如果条件还没满足（还没抽到过指定cost的签）
+                        if (!freeConditionMet) {
+                            // 将字符串按 & 切分，只要有一个满足条件，就不划线
+                            const singleNames = draws[i].split('&');
+                            let hasMatchingCost = false;
+                            
+                            for (const sName of singleNames) {
+                                const charObj = options.find(opt => opt.name === sName);
+                                if (charObj && String(charObj.cost) === String(status.freeCost)) {
+                                    hasMatchingCost = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (hasMatchingCost) {
+                                freeConditionMet = true;
+                            } else {
+                                shouldUnderline = true;
+                            }
+                        }
+                    }
+
+                    if (shouldUnderline) {
+                        drawSpan.style.textDecoration = "underline";
+                    } else {
+                        // 如果不带下划线，则计入有效抽签总数（包含&字符串的整体也是1次循环，加1次）
+                        validDrawCount++;
+                    }
+
                     rowDiv.appendChild(drawSpan);
 
                     if (i < draws.length - 1) {
@@ -634,6 +802,16 @@
                         rowDiv.appendChild(commaNode);
                     }
                 }
+
+                // 计算并显示总花费
+                const totalCost = Math.pow(2, validDrawCount + 1) - 2;
+                const costSpan = document.createElement("span");
+                costSpan.style.color = "rgb(255, 0, 0)";
+                costSpan.style.marginLeft = "15px";
+                costSpan.style.fontSize = "18px";
+                costSpan.innerText = `[总花费：${totalCost}]`;
+                
+                rowDiv.appendChild(costSpan);
                 listDiv.appendChild(rowDiv);
             }
         }
