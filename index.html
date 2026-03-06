@@ -44,6 +44,13 @@
         #ban-display-area { margin-top: 25px; font-size: 18px; font-weight: bold; }
         .ban-item { display: inline-block; margin: 5px 15px; padding: 8px 15px; background-color: #ffebee; color: #c62828; border-radius: 8px; border: 1px solid #ffcdd2; }
 
+        /* 【修改点】：将BAN注册的提示框改为绿色调 */
+        #ban-position-display {
+            background-color: #e8f5e9; 
+            color: #2e7d32;            
+            border-color: #c8e6c9;     
+        }
+
         #history-container {
             margin-top: 40px; padding: 20px; width: 80%;
             margin-left: auto; margin-right: auto; border-top: 1px dashed #ccc;
@@ -116,14 +123,53 @@
                     <input type="checkbox" id="chk-ban-style" onchange="toggleBanInput('style')" style="width: 18px; height: 18px; vertical-align: middle;"> 
                     <span style="vertical-align: middle;">BAN风格</span>
                 </label>
-                <input type="text" id="input-ban-style" class="input-box" style="width: 160px; display: none; margin: 0 0 0 15px; padding: 5px; font-size: 16px; vertical-align: middle;" placeholder="输入要屏蔽的风格">
+                <select id="input-ban-style" class="input-box" style="width: 160px; display: none; margin: 0 0 0 15px; padding: 5px; font-size: 16px; vertical-align: middle;">
+                    <option value="" disabled selected>请选择风格</option>
+                    <option value="无风格">无风格</option>
+                    <option value="目标中锋">目标中锋</option>
+                    <option value="偷猎者">偷猎者</option>
+                    <option value="禁区之狐">禁区之狐</option>
+                    <option value="虚假跑位">虚假跑位</option>
+                    <option value="影子前锋">影子前锋</option>
+                    <option value="高产翼锋">高产翼锋</option>
+                    <option value="自由侧翼">自由侧翼</option>
+                    <option value="创意指挥官">创意指挥官</option>
+                    <option value="传统10号位置">传统10号位置</option>
+                    <option value="传中专家">传中专家</option>
+                    <option value="全能中场">全能中场</option>
+                    <option value="指挥官">指挥官</option>
+                    <option value="破坏型中场">破坏型中场</option>
+                    <option value="靠山">靠山</option>
+                    <option value="迭瓦式终结者">迭瓦式终结者</option>
+                    <option value="进攻型后卫">进攻型后卫</option>
+                    <option value="防守型后卫">防守型后卫</option>
+                    <option value="额外前锋">额外前锋</option>
+                    <option value="建立">建立</option>
+                    <option value="进攻型守门员">进攻型守门员</option>
+                    <option value="防守型守门员">防守型守门员</option>
+                </select>
             </div>
             <div style="margin-bottom: 30px; font-size: 18px;">
                 <label style="cursor: pointer;">
                     <input type="checkbox" id="chk-ban-position" onchange="toggleBanInput('position')" style="width: 18px; height: 18px; vertical-align: middle;"> 
                     <span style="vertical-align: middle;">BAN注册</span>
                 </label>
-                <input type="text" id="input-ban-position" class="input-box" style="width: 160px; display: none; margin: 0 0 0 15px; padding: 5px; font-size: 16px; vertical-align: middle;" placeholder="输入要屏蔽的注册">
+                <select id="input-ban-position" class="input-box" style="width: 160px; display: none; margin: 0 0 0 15px; padding: 5px; font-size: 16px; vertical-align: middle;">
+                    <option value="" disabled selected>请选择位置</option>
+                    <option value="CF">CF</option>
+                    <option value="SS">SS</option>
+                    <option value="LF">LF</option>
+                    <option value="RF">RF</option>
+                    <option value="AM">AM</option>
+                    <option value="LM">LM</option>
+                    <option value="RM">RM</option>
+                    <option value="CM">CM</option>
+                    <option value="DM">DM</option>
+                    <option value="LB">LB</option>
+                    <option value="RB">RB</option>
+                    <option value="CB">CB</option>
+                    <option value="GK">GK</option>
+                </select>
             </div>
             <div style="text-align: center;">
                 <button class="modal-btn btn-yes" onclick="saveExtFeatures()">确定</button>
@@ -160,6 +206,8 @@
         let historyRecords = [];
         let hasPassword = false;
         
+        let userBanStatusMap = {}; // 【新增】用于记录所有用户的 BAN 使用状态
+
         // 扩展功能状态
         let activeBanStyle = "";
         let activeBanPosition = "";
@@ -167,6 +215,7 @@
         window.onload = async () => {
             document.getElementById("system-status").innerText = "正在加载数据库信息...";
             await fetchOptions(); 
+            await fetchUserBanStatus(); // 【新增】拉取用户 BAN 状态
             await fetchHistory();
             setupRealtime(); 
             document.getElementById("system-status").innerText = "数据库连接成功，可以登录。";
@@ -177,7 +226,6 @@
         // ==========================================
         
         async function fetchOptions() {
-            // 【修改点】：同时拉取 fengge 和 position 字段用于过滤
             const { data, error } = await supabaseClient
                 .from('characters_pool') 
                 .select('num, name, fengge, position'); 
@@ -189,6 +237,24 @@
             }
             
             options = data || [];
+        }
+
+        // 【新增函数】读取用户 BAN 状态
+        async function fetchUserBanStatus() {
+            const { data, error } = await supabaseClient
+                .from('user_ban_status')
+                .select('*');
+            if (!error && data) {
+                userBanStatusMap = {};
+                data.forEach(row => {
+                    userBanStatusMap[row.username] = {
+                        style: row.used_ban_style,
+                        position: row.used_ban_position
+                    };
+                });
+            } else if (error) {
+                console.error("读取用户BAN状态失败:", error);
+            }
         }
 
         async function fetchHistory() {
@@ -213,9 +279,10 @@
         function setupRealtime() {
             supabaseClient
                 .channel('public:draw_history')
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'draw_history' }, payload => {
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'draw_history' }, async payload => {
                     const newRecord = payload.new;
                     historyRecords.push({ user: newRecord.username, draw: newRecord.draw_name });
+                    await fetchUserBanStatus(); // 【新增】发生新抽签时，刷新一下各用户的星号状态
                     renderHistory();
                 })
                 .subscribe();
@@ -225,13 +292,20 @@
         // 4. 扩展功能逻辑 (BAN风格 / BAN注册)
         // ==========================================
         function showExtModal() {
-            // 打开前同步当前状态到复选框和输入框
             document.getElementById("chk-ban-style").checked = !!activeBanStyle;
-            document.getElementById("input-ban-style").value = activeBanStyle;
+            if (activeBanStyle) {
+                document.getElementById("input-ban-style").value = activeBanStyle;
+            } else {
+                document.getElementById("input-ban-style").value = "";
+            }
             toggleBanInput('style');
 
             document.getElementById("chk-ban-position").checked = !!activeBanPosition;
-            document.getElementById("input-ban-position").value = activeBanPosition;
+            if (activeBanPosition) {
+                document.getElementById("input-ban-position").value = activeBanPosition;
+            } else {
+                document.getElementById("input-ban-position").value = "";
+            }
             toggleBanInput('position');
 
             document.getElementById("ext-modal-overlay").style.display = "flex";
@@ -250,17 +324,20 @@
             const isBanStyleChecked = document.getElementById("chk-ban-style").checked;
             const isBanPositionChecked = document.getElementById("chk-ban-position").checked;
 
-            if (isBanStyleChecked) {
-                activeBanStyle = document.getElementById("input-ban-style").value.trim();
-            } else {
-                activeBanStyle = "";
+            const styleVal = document.getElementById("input-ban-style").value.trim();
+            const posVal = document.getElementById("input-ban-position").value.trim();
+
+            if (isBanStyleChecked && !styleVal) {
+                alert("请在下拉框中选择要BAN的风格！");
+                return;
+            }
+            if (isBanPositionChecked && !posVal) {
+                alert("请在下拉框中选择要BAN的注册位置！");
+                return;
             }
 
-            if (isBanPositionChecked) {
-                activeBanPosition = document.getElementById("input-ban-position").value.trim();
-            } else {
-                activeBanPosition = "";
-            }
+            activeBanStyle = isBanStyleChecked ? styleVal : "";
+            activeBanPosition = isBanPositionChecked ? posVal : "";
 
             updateBanDisplay();
             hideExtModal();
@@ -351,7 +428,6 @@
             document.getElementById("password-input").value = ""; 
             currentUser = "";
             hasPassword = false;
-            // 登出时清空BAN状态
             clearBan('style');
             clearBan('position');
         }
@@ -440,10 +516,8 @@
                 }
             }
 
-            // 1. 先过滤掉已经被其他人抽走的签
             let availableOptions = options.filter(opt => !unavailableOptions.includes(opt.name));
 
-            // 2. 根据扩展功能的设定过滤 (BAN风格 / BAN注册)
             if (activeBanStyle) {
                 availableOptions = availableOptions.filter(opt => opt.fengge !== activeBanStyle);
             }
@@ -467,11 +541,35 @@
                 .insert([{ username: currentUser, draw_name: drawnName }]);
 
             if (error) {
-                console.error("写入失败:", error);
+                console.error("写入抽签记录失败:", error);
                 alert("网络错误，抽签结果保存失败，请重试！");
                 document.getElementById("result").innerText = "等待中...";
                 drawBtn.disabled = false;
                 return;
+            }
+
+            // 【新增】判断本次抽签是否使用了BAN功能，如果是，更新到数据库
+            if (activeBanStyle || activeBanPosition) {
+                const currentStatus = userBanStatusMap[currentUser] || { style: false, position: false };
+                const newStyle = currentStatus.style || !!activeBanStyle;
+                const newPosition = currentStatus.position || !!activeBanPosition;
+                
+                // 如果状态有新变化，执行 upsert 更新数据库
+                if (newStyle !== currentStatus.style || newPosition !== currentStatus.position) {
+                    const { error: banError } = await supabaseClient
+                        .from('user_ban_status')
+                        .upsert([{ 
+                            username: currentUser, 
+                            used_ban_style: newStyle, 
+                            used_ban_position: newPosition 
+                        }]);
+                    
+                    if (!banError) {
+                        userBanStatusMap[currentUser] = { style: newStyle, position: newPosition };
+                    } else {
+                        console.error("更新用户BAN状态失败:", banError);
+                    }
+                }
             }
 
             document.getElementById("result").innerText = drawnName;
@@ -500,9 +598,21 @@
                 const rowDiv = document.createElement("div");
                 rowDiv.className = "history-row";
 
+                // 【修改点】：动态拼接用户名和对应的红/绿星号
                 const userSpan = document.createElement("span");
                 userSpan.className = "history-user";
-                userSpan.innerText = `${user}：`;
+                
+                let htmlContent = user;
+                const status = userBanStatusMap[user] || { style: false, position: false };
+                if (status.style) {
+                    htmlContent += `<span style="color: #c62828; margin-left: 2px;">*</span>`; 
+                }
+                if (status.position) {
+                    htmlContent += `<span style="color: #2e7d32; margin-left: 2px;">*</span>`; 
+                }
+                htmlContent += "：";
+                
+                userSpan.innerHTML = htmlContent;
                 rowDiv.appendChild(userSpan);
 
                 const draws = userDrawsMap[user];
