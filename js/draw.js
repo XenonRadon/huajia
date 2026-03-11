@@ -13,7 +13,6 @@ let activeDoubleDraw = false;
 
 // 从 LocalStorage 读取当前用户状态 (注意这里，不要再写 let currentUser = "" 了)
 let currentUser = localStorage.getItem('currentUser');
-let hasPassword = localStorage.getItem('hasPassword') === 'true';
 
 // ==========================================
 // 2. 页面加载初始化
@@ -27,12 +26,6 @@ window.onload = async () => {
 
     // 设置UI显示
     document.getElementById("current-user-display").innerText = `(当前操作人: ${currentUser})`;
-    document.getElementById("set-pwd-btn").style.display = hasPassword ? "none" : "inline-block";
-    
-    // 如果没有密码，弹出提示
-    if (!hasPassword) {
-        document.getElementById("no-pwd-modal-overlay").style.display = "flex";
-    }
 
     // 初始化数据
     await fetchOptions(); 
@@ -487,47 +480,4 @@ async function fetchOptions() {
                 rowDiv.appendChild(costSpan);
                 listDiv.appendChild(rowDiv);
             }
-        }
-		function showPwdModal() {
-            document.getElementById("new-password-input").value = "";
-            document.getElementById("pwd-modal-overlay").style.display = "flex";
-        }
-
-        function hidePwdModal() {
-            document.getElementById("pwd-modal-overlay").style.display = "none";
-        }
-		
-		// 关闭未设置密码的提示弹窗
-        function closeNoPwdModal() {
-            document.getElementById("no-pwd-modal-overlay").style.display = "none";
-        }
-
-        async function confirmSetPwd() {
-            const newPwd = document.getElementById("new-password-input").value.trim();
-            if (!newPwd) {
-                alert("密码不能为空！");
-                return;
-            }
-
-            const saveBtn = document.getElementById("save-pwd-btn");
-            saveBtn.disabled = true;
-            saveBtn.innerText = "保存中...";
-
-            const { error } = await supabaseClient
-                .from('user_passwords')
-                .insert([{ username: currentUser, password: newPwd }]);
-
-            saveBtn.disabled = false;
-            saveBtn.innerText = "保存";
-
-            if (error) {
-                console.error("保存密码失败:", error);
-                alert("保存密码失败，可能是网络问题。");
-                return;
-            }
-
-            alert("密码设置成功！下次登录需使用该密码。");
-            hasPassword = true;
-            hidePwdModal();
-            document.getElementById("set-pwd-btn").style.display = "none";
         }
