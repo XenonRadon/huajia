@@ -7,28 +7,109 @@
 </head>
 <body>
     <h1 style="margin-bottom: 20px;">系统主菜单</h1>
-    <h2 id="welcome-text" style="color: #1976d2; font-weight: normal; margin-bottom: 40px;"></h2>
+    <h2 style="color: #1976d2; font-weight: normal; margin-bottom: 40px;">
+        <span id="welcome-text"></span>
+        <button class="small-btn btn-warning" id="set-pwd-btn" style="display: none;" onclick="showPwdModal()">设置密码</button>
+    </h2>
     
     <div style="margin-bottom: 30px;">
         <button class="main-btn" onclick="window.location.href='package.html'">抽培养包</button>
-        
         <button class="main-btn" onclick="window.location.href='draw.html'">抽外籍</button>
     </div>
+	
+	<div style="margin-bottom: 30px;">
+        <button class="main-btn btn-ext" onclick="window.location.href='records.html'">查看记录</button>
+    </div>
     
-    <button class="small-btn btn-no" onclick="logout()">退出登录</button>
+    <button class="small-btn btn-no" style="margin: 0;" onclick="logout()">退出登录</button>
 
+    <div id="pwd-modal-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <p>请设置您的专属密码</p>
+            <input type="password" id="new-password-input" class="input-box" style="width: 80%;" placeholder="请输入新密码">
+            <br>
+            <button class="modal-btn btn-yes" id="save-pwd-btn" onclick="confirmSetPwd()">保存</button>
+            <button class="modal-btn btn-no" onclick="hidePwdModal()">取消</button>
+        </div>
+    </div>
+    
+    <div id="no-pwd-modal-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <p>您未设置密码，请尽快设置密码</p>
+            <button class="modal-btn btn-yes" onclick="closeNoPwdModal()">确认</button>
+        </div>
+    </div>
+
+    <script src="js/supabase-init.js"></script>
     <script src="js/auth.js"></script>
     <script>
-        // 页面加载时检查是否已登录
+        let currentUser = localStorage.getItem('currentUser');
+        let hasPassword = localStorage.getItem('hasPassword') === 'true';
+
+        // 页面加载时检查是否已登录并判断密码状态
         window.onload = () => {
-            const user = localStorage.getItem('currentUser');
-            if (!user) {
+            if (!currentUser) {
                 alert("未登录或登录已过期，请重新登录！");
                 window.location.href = 'index.html';
-            } else {
-                document.getElementById('welcome-text').innerText = `欢迎回来，${user}！`;
+                return;
+            } 
+            
+            document.getElementById('welcome-text').innerText = `欢迎回来，${currentUser}！`;
+
+            // 控制设置密码按钮和提示弹窗的显示
+            document.getElementById("set-pwd-btn").style.display = hasPassword ? "none" : "inline-block";
+            if (!hasPassword) {
+                document.getElementById("no-pwd-modal-overlay").style.display = "flex";
             }
         };
+
+        // --- 以下为转移过来的密码处理逻辑 ---
+        function showPwdModal() {
+            document.getElementById("new-password-input").value = "";
+            document.getElementById("pwd-modal-overlay").style.display = "flex";
+        }
+
+        function hidePwdModal() {
+            document.getElementById("pwd-modal-overlay").style.display = "none";
+        }
+        
+        function closeNoPwdModal() {
+            document.getElementById("no-pwd-modal-overlay").style.display = "none";
+        }
+
+        async function confirmSetPwd() {
+            const newPwd = document.getElementById("new-password-input").value.trim();
+            if (!newPwd) {
+                alert("密码不能为空！");
+                return;
+            }
+
+            const saveBtn = document.getElementById("save-pwd-btn");
+            saveBtn.disabled = true;
+            saveBtn.innerText = "保存中...";
+
+            const { error } = await supabaseClient
+                .from('user_passwords')
+                .insert([{ username: currentUser, password: newPwd }]);
+
+            saveBtn.disabled = false;
+            saveBtn.innerText = "保存";
+
+            if (error) {
+                console.error("保存密码失败:", error);
+                alert("保存密码失败，可能是网络问题。");
+                return;
+            }
+
+            alert("密码设置成功！下次登录需使用该密码。");
+            
+            // 更新状态并存入本地缓存，防止刷新后再次弹窗
+            hasPassword = true;
+            localStorage.setItem('hasPassword', 'true'); 
+            
+            hidePwdModal();
+            document.getElementById("set-pwd-btn").style.display = "none";
+        }
     </script>
 </body>
 </html>

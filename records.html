@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>查看记录</title>
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        #records-section { 
+            width: 90%; 
+            margin: 0 auto; 
+            max-width: 800px; 
+        }
+        
+        .records-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 30px; 
+            background-color: #fff; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            border-radius: 8px; 
+            overflow: hidden; 
+        }
+        
+        .records-table th, .records-table td { 
+            border: 1px solid #ddd; 
+            padding: 15px; 
+            text-align: center; 
+            font-size: 18px; 
+        }
+        
+        .records-table th { 
+            background-color: #1976d2; 
+            color: white; 
+            font-weight: bold; 
+        }
+        
+        .records-table tr:nth-child(even) { 
+            background-color: #f9f9f9; 
+        }
+        
+        .records-table tr:hover { 
+            background-color: #e3f2fd; 
+        }
+        
+        .cost-total {
+            font-weight: bold;
+            color: #d32f2f;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div style="text-align: left; padding: 10px 20px;">
+        <button class="small-btn" onclick="window.location.href='menu.html'">← 返回主菜单</button>
+    </div>
+
+    <div id="records-section">
+        <h1 id="page-title">加载中... - 花费汇总</h1>
+        
+        <div id="loading-text" style="font-size: 20px; color: #1565c0; margin-top: 40px;">正在努力计算各项花费数据，请稍候...</div>
+        
+        <table class="records-table" id="records-table" style="display: none;">
+            <thead>
+                <tr>
+                    <th style="width: 25%;">用户</th>
+                    <th style="width: 25%;">培养包花费</th>
+                    <th style="width: 25%;">外籍花费</th>
+                    <th style="width: 25%;">总花费</th>
+                </tr>
+            </thead>
+            <tbody id="records-tbody">
+                </tbody>
+        </table>
+    </div>
+
+    <script src="js/supabase-init.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/records.js"></script>
+</body>
+</html>

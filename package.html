@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>抽培养包</title>
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        /* 培养包专属样式 */
+        #package-section {
+            width: 95%;
+            margin: 0 auto;
+        }
+        
+        /* 使用 Grid 布局，强制每行 3 个等宽的列，列间距 15px */
+        #packages-container {
+            margin-top: 30px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px; 
+            align-items: start;
+        }
+        
+        .package-box {
+            border: 2px solid #1976d2;
+            border-radius: 8px;
+            padding: 12px;
+            width: 100%;
+            box-sizing: border-box; /* 确保 padding 不会撑破 grid 单元格 */
+            background-color: #fff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        
+        .package-title {
+            font-size: 16px; /* 缩小标题字号 */
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #1565c0;
+            text-align: center;
+        }
+        
+        .package-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .package-table td {
+            border: 1px solid #ddd;
+            padding: 6px 8px; /* 缩小单元格内边距 */
+            text-align: center;
+            font-size: 14px; /* 缩小表格字号 */
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div style="text-align: left; padding: 10px 20px;">
+        <button class="small-btn" onclick="window.location.href='menu.html'">← 返回主菜单</button>
+    </div>
+
+    <div id="package-section">
+        <h1>抽培养包 
+            <span id="current-user-display" style="font-size: 20px; color: #1976d2; font-weight: normal; margin-left: 10px;"></span>
+        </h1>
+        
+        <div style="margin-top: 20px; position: relative; display: inline-block;">
+            <button class="main-btn" id="draw-pkg-btn" onclick="drawPackages()">抽！</button>
+            <span id="total-cost-display" style="color: rgb(255, 0, 0); position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 15px; font-size: 18px; white-space: nowrap; display: none;"></span>
+        </div>
+
+        <div id="initial-hint" style="color: #888; margin-top: 20px;">点击上方按钮抽取培养包</div>
+
+        <div id="packages-container"></div>
+    </div>
+
+    <script src="js/supabase-init.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/package.js"></script>
+</body>
+</html>
