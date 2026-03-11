@@ -4,22 +4,26 @@
     <meta charset="UTF-8">
     <title>华足辅助工具 - 主菜单</title>
     <link rel="stylesheet" href="css/common.css">
-    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <h1 style="margin-bottom: 20px;">系统主菜单</h1>
-    <h2 style="color: #1976d2; font-weight: normal; margin-bottom: 40px;">
+    
+    <h2 style="color: #1976d2; font-weight: normal; margin-bottom: 10px;">
         <span id="welcome-text"></span>
         <button class="small-btn btn-warning" id="set-pwd-btn" style="display: none;" onclick="showPwdModal()">设置密码</button>
     </h2>
+
+    <h3 id="season-display" style="color: #666; font-weight: normal; margin-bottom: 40px; margin-top: 0;">
+        当前赛季：读取中...
+    </h3>
     
     <div style="margin-bottom: 30px;">
         <button class="main-btn" onclick="window.location.href='package.html'">抽培养包</button>
         <button class="main-btn" onclick="window.location.href='draw.html'">抽外籍</button>
     </div>
-	
-	<div style="margin-bottom: 30px;">
+
+    <div style="margin-bottom: 30px;">
         <button class="main-btn btn-ext" onclick="window.location.href='records.html'">查看记录</button>
     </div>
     
@@ -49,7 +53,7 @@
         let hasPassword = localStorage.getItem('hasPassword') === 'true';
 
         // 页面加载时检查是否已登录并判断密码状态
-        window.onload = () => {
+        window.onload = async () => {
             if (!currentUser) {
                 alert("未登录或登录已过期，请重新登录！");
                 window.location.href = 'index.html';
@@ -63,9 +67,27 @@
             if (!hasPassword) {
                 document.getElementById("no-pwd-modal-overlay").style.display = "flex";
             }
+
+            // === 新增：从 now 数据库读取当前赛季并显示 ===
+            try {
+                const { data, error } = await supabaseClient
+                    .from('now')
+                    .select('num');
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    document.getElementById('season-display').innerText = `当前赛季：${data[0].num}`;
+                } else {
+                    document.getElementById('season-display').innerText = `当前赛季：未知`;
+                }
+            } catch (err) {
+                console.error("读取赛季失败:", err);
+                document.getElementById('season-display').innerText = `当前赛季：获取失败`;
+            }
         };
 
-        // --- 以下为转移过来的密码处理逻辑 ---
+        // --- 密码处理逻辑 ---
         function showPwdModal() {
             document.getElementById("new-password-input").value = "";
             document.getElementById("pwd-modal-overlay").style.display = "flex";
@@ -105,7 +127,6 @@
 
             alert("密码设置成功！下次登录需使用该密码。");
             
-            // 更新状态并存入本地缓存，防止刷新后再次弹窗
             hasPassword = true;
             localStorage.setItem('hasPassword', 'true'); 
             
