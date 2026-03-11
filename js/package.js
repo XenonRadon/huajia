@@ -24,26 +24,47 @@ window.onload = async () => {
     // 设置UI显示当前操作人
     document.getElementById("current-user-display").innerText = `(当前操作人: ${currentUser})`;
 
-    // 锁定抽取按钮，防止数据没读完就点击
-    const drawBtn = document.getElementById("draw-pkg-btn");
-    if (drawBtn) {
-        drawBtn.disabled = true;
-        drawBtn.innerText = "读取历史数据中...";
+    // === 新增：OB 视角专属 UI 处理 ===
+    if (currentUser === 'OB') {
+        const drawControls = document.getElementById("draw-pkg-btn")?.parentElement;
+        if (drawControls) drawControls.style.display = "none"; // 隐藏抽卡和扩展功能按钮
+        
+        const extDisplayArea = document.getElementById("ext-display-area");
+        if (extDisplayArea) extDisplayArea.style.display = "none"; // 隐藏下方的红色提示框
+        
+        const hintMsg = document.getElementById("initial-hint");
+        if (hintMsg) {
+            hintMsg.innerText = "【OB】正在查看所有用户的培养包记录";
+            hintMsg.style.color = "#1976d2";
+            hintMsg.style.fontWeight = "bold";
+        }
+    } else {
+        // 普通用户锁定抽取按钮，防止数据没读完就点击
+        const drawBtn = document.getElementById("draw-pkg-btn");
+        if (drawBtn) {
+            drawBtn.disabled = true;
+            drawBtn.innerText = "读取历史数据中...";
+        }
     }
 
     // 按顺序加载各项数据
     await fetchCurrentSeason();
     await fetchMovesData();
-    await fetchUserBanStatus(); // 读取扩展功能状态
+    if (currentUser !== 'OB') {
+        await fetchUserBanStatus(); // OB 不需要读取扩展功能状态
+    }
     await loadPackageHistory();
 
     // 更新红色提示框
-    updateExtDisplay(); 
-
-    // 数据读取完毕，解锁按钮
-    if (drawBtn) {
-        drawBtn.disabled = false;
-        drawBtn.innerText = "抽！";
+    if (currentUser !== 'OB') {
+        updateExtDisplay(); 
+        
+        // 数据读取完毕，解锁按钮
+        const drawBtn = document.getElementById("draw-pkg-btn");
+        if (drawBtn) {
+            drawBtn.disabled = false;
+            drawBtn.innerText = "抽！";
+        }
     }
 };
 
@@ -71,7 +92,6 @@ function showExtModal() {
     const chk = document.getElementById("chk-double-ssr");
     chk.checked = pkgDoubleSsrActive;
     
-    // 如果已经开始抽了，或者该功能已经失效（双SSR已触发），则锁定复选框不可取消
     if (totalPackagesDrawn > 0 || pkgDoubleSsrEnded) {
         chk.disabled = true;
     } else {
@@ -87,7 +107,6 @@ function hideExtModal() {
 
 async function saveExtFeatures() {
     const chk = document.getElementById("chk-double-ssr");
-    // 只有在未锁定状态下才允许保存更改
     if (!chk.disabled) {
         if (chk.checked !== pkgDoubleSsrActive) {
             pkgDoubleSsrActive = chk.checked;
@@ -97,7 +116,7 @@ async function saveExtFeatures() {
             }]);
         }
     }
-    updateExtDisplay(); // 更新页面提示框
+    updateExtDisplay(); 
     hideExtModal();
 }
 
@@ -108,14 +127,12 @@ function updateExtDisplay() {
     if (pkgDoubleSsrActive) {
         displayBox.style.display = "inline-block";
         
-        // 动态判断状态：已失效、已锁定(抽签中)、可取消
         if (pkgDoubleSsrEnded) {
             displayBox.innerHTML = '双SSR之前免费 <span style="font-size: 14px; font-weight: normal; color: #888; margin-left: 5px;">(已失效)</span>';
         } else if (totalPackagesDrawn > 0) {
-            displayBox.innerHTML = '双SSR之前免费 <span style="font-size: 14px; font-weight: normal; color: #888; margin-left: 5px;">(已锁定)</span>';
+            displayBox.innerHTML = '已开启：双SSR之前免费 <span style="font-size: 14px; font-weight: normal; color: #888; margin-left: 5px;">(已锁定)</span>';
         } else {
-            // 还没开始抽，显示取消按钮
-            displayBox.innerHTML = '双SSR之前免费 <button class="small-btn" style="padding: 2px 8px; margin-left: 10px; font-size: 14px; color: #333; border-color: #ccc; background-color: #eee;" onclick="clearExtFeature()">取消</button>';
+            displayBox.innerHTML = '已开启：双SSR之前免费 <button class="small-btn" style="padding: 2px 8px; margin-left: 10px; font-size: 14px; color: #333; border-color: #ccc; background-color: #eee;" onclick="clearExtFeature()">取消</button>';
         }
     } else {
         displayBox.style.display = "none";
@@ -157,7 +174,6 @@ function updateTotalCostDisplay() {
     const costDisplay = document.getElementById("total-cost-display");
     if (!costDisplay) return;
 
-    // 花费计算基于 paidPackagesCount 计算，排除掉免费包
     const n = Math.floor(paidPackagesCount / 5); 
     
     if (n > 0) {
@@ -183,36 +199,42 @@ function shuffleArray(array) {
 // =========================================
 async function loadPackageHistory() {
     const container = document.getElementById("packages-container");
-    const hintMsg = document.getElementById("initial-hint");
 
     try {
-        const { data, error } = await supabaseClient
-            .from('package_history')
-            .select('*')
-            .eq('username', currentUser)
-            .order('package_index', { ascending: true }); 
+        let query = supabaseClient.from('package_history').select('*');
+        if (currentUser === 'OB') {
+            // 【修改排序】：先按用户名排序（把同一个人的聚在一起），再按 id 排序（保证同一人的包按时间先后排列）
+            query = query.order('username', { ascending: true }).order('id', { ascending: true }); 
+        } else {
+            query = query.eq('username', currentUser).order('package_index', { ascending: true });
+        }
 
-        if (error) throw error;
+        const { data, error } = await query;
 
-        paidPackagesCount = 0; // 重置付费包计数
+        if (error) {
+            alert("读取数据失败！请检查数据库配置。\n错误原因：" + error.message);
+            throw error;
+        }
+
+        paidPackagesCount = 0; 
 
         if (data && data.length > 0) {
-            if (hintMsg) hintMsg.style.display = "none";
             let htmlContent = "";
             
             data.forEach(pkg => {
-                totalPackagesDrawn = Math.max(totalPackagesDrawn, pkg.package_index || 0); 
-                
-                // 只有不是免费的才计入花费计数器
-                if (!pkg.is_free) {
-                    paidPackagesCount++; 
+                if (currentUser !== 'OB') {
+                    totalPackagesDrawn = Math.max(totalPackagesDrawn, pkg.package_index || 0); 
+                    if (!pkg.is_free) {
+                        paidPackagesCount++; 
+                    }
                 }
                 
                 const freeText = pkg.is_free ? "（免费）" : "";
+                const displayUser = pkg.username || currentUser;
                 
                 htmlContent += `
                     <div class="package-box">
-                        <div class="package-title">${currentUser}-${pkg.season}-第${pkg.package_index}包<span style="color: #4CAF50;">${freeText}</span></div>
+                        <div class="package-title">${displayUser}-${pkg.season}-第${pkg.package_index}包<span style="color: #4CAF50;">${freeText}</span></div>
                         <table class="package-table">
                             <tbody>
                 `;
@@ -231,7 +253,10 @@ async function loadPackageHistory() {
             });
 
             container.innerHTML = htmlContent;
-            updateTotalCostDisplay();
+            if (currentUser !== 'OB') updateTotalCostDisplay();
+            
+        } else if (currentUser === 'OB') {
+            container.innerHTML = "<div style='color: #666; font-size: 18px; margin-top: 30px;'>当前数据库中没有任何用户的培养包记录。</div>";
         }
     } catch (err) {
         console.error("读取历史记录代码异常:", err);
@@ -265,7 +290,6 @@ async function drawPackages() {
         const dataMap = {};
         if (data) data.forEach(item => { dataMap[item.num] = item; });
 
-        // === 统计这30个项目中 SSR 的数量 ===
         let ssrCount = 0;
         for (let num of numList) {
             const rowData = dataMap[num];
@@ -274,13 +298,11 @@ async function drawPackages() {
             }
         }
 
-        // === 判断这一批(5包)是否免费 ===
         let isBatchFree = false;
         if (pkgDoubleSsrActive && !pkgDoubleSsrEnded) {
             if (ssrCount <= 1) {
                 isBatchFree = true;
             } else {
-                // 如果 >= 2，免费失效，永久结束此功能
                 isBatchFree = false;
                 pkgDoubleSsrEnded = true;
                 await supabaseClient.from('user_ban_status').upsert([{
@@ -313,7 +335,6 @@ async function drawPackages() {
                 const rowData = dataMap[currentNum] || { type: '缺失', content: `编号 ${currentNum} 不存在` };
                 let displayContent = rowData.content; 
 
-                // === 如果 pick 为 1，执行替换逻辑 ===
                 if (rowData.pick === 1) {
                     const moveCols = ['move_JQ', 'move_SM', 'move_CQ', 'move_FS', 'move_MJ', 'DNFG'];
                     let targetCat = null, pickCount = 0;
@@ -336,11 +357,10 @@ async function drawPackages() {
                 season: currentSeason,
                 package_index: totalPackagesDrawn,
                 items: currentPackageItems,
-                is_free: isBatchFree // 存入数据库标记这包是否免费
+                is_free: isBatchFree 
             });
         }
 
-        // 保存到数据库
         const { error: insertError } = await supabaseClient.from('package_history').insert(newPackagesToSave);
         if (insertError) {
             totalPackagesDrawn -= 5; 
@@ -348,7 +368,6 @@ async function drawPackages() {
             throw insertError;
         }
 
-        // 追加到页面并更新 UI
         container.insertAdjacentHTML('beforeend', htmlContent);
         updateTotalCostDisplay();
         updateExtDisplay(); 

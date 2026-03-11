@@ -22,7 +22,7 @@ window.onload = async () => {
     await loadAllRecords();
 };
 
-// --- 新增：从 now 数据库获取赛季数 ---
+// 从 now 数据库获取赛季数
 async function fetchCurrentSeason() {
     try {
         const { data, error } = await supabaseClient
@@ -42,43 +42,55 @@ async function fetchCurrentSeason() {
 async function loadAllRecords() {
     try {
         // ================= 1. 读取所有的必须数据 =================
-        // 读取培养包记录
+        // 读取培养包记录 (加上 is_free 字段以便判断是否使用过扩展功能)
         const { data: pkgData, error: pkgError } = await supabaseClient
             .from('package_history')
             .select('username, package_index, is_free');
         if (pkgError) throw pkgError;
 
-        // 读取外籍抽签记录（按时间严格排序，否则免费判定会算错）
+        // 读取外籍抽签记录
         const { data: drawData, error: drawError } = await supabaseClient
             .from('draw_history')
             .select('username, draw_name')
             .order('created_at', { ascending: true });
         if (drawError) throw drawError;
 
-        // 读取外籍抽签池（为了拿到 cost 来算下划线）
+        // 读取外籍抽签池
         const { data: poolData, error: poolError } = await supabaseClient
             .from('characters_pool')
             .select('name, cost');
         if (poolError) throw poolError;
 
-        // 读取用户外籍 BAN 状态（找 freeCost）
+        // 读取用户外籍 BAN 状态
         const { data: banData, error: banError } = await supabaseClient
             .from('user_ban_status')
             .select('username, used_free_cost');
         if (banError) throw banError;
 
 
-        // ================= 2. 计算【培养包花费】 =================
+        // ================= 2. 计算【培养包花费】及星号标记 =================
         const packageCosts = {};
+        const pkgStarUsers = new Set(); // 记录享受过双SSR免费的用户
+
         if (pkgData) {
             const paidPkgCountMap = {};
-            // 统计每个用户【非免费】的包的数量
+            
             pkgData.forEach(row => {
-                if (!row.is_free) {
-                    paidPkgCountMap[row.username] = (paidPkgCountMap[row.username] || 0) + 1;
+                // 初始化防止漏掉只抽了免费包的用户
+                if (paidPkgCountMap[row.username] === undefined) {
+                    paidPkgCountMap[row.username] = 0;
+                }
+
+                if (row.is_free) {
+                    // 如果有免费包，记录该用户需要打星号
+                    pkgStarUsers.add(row.username);
+                } else {
+                    // 只有付费包才计入数量
+                    paidPkgCountMap[row.username]++;
                 }
             });
-            // 计算花费：2.5 * N * (N + 1)，N 是付费包除以 5
+            
+            // 计算花费：2.5 * N * (N + 1)
             for (const user in paidPkgCountMap) {
                 const n = Math.floor(paidPkgCountMap[user] / 5);
                 packageCosts[user] = n > 0 ? (2.5 * n * (n + 1)) : 0;
@@ -86,10 +98,11 @@ async function loadAllRecords() {
         }
 
 
-        // ================= 3. 计算【外籍花费】 =================
+        // ================= 3. 计算【外籍花费】及星号标记 =================
         const drawCosts = {};
+        const drawStarUsers = new Set(); // 记录享受过N费免费的用户
+
         if (drawData) {
-            // 将签池映射为 名字->花费 的字典
             const charCostMap = {};
             if (poolData) {
                 poolData.forEach(char => {
@@ -97,7 +110,6 @@ async function loadAllRecords() {
                 });
             }
 
-            // 将用户状态映射为 用户->freeCost 的字典
             const userFreeCostMap = {};
             if (banData) {
                 banData.forEach(ban => {
@@ -105,7 +117,6 @@ async function loadAllRecords() {
                 });
             }
 
-            // 按用户将抽签记录分组
             const userDrawsMap = {};
             drawData.forEach(row => {
                 if (!userDrawsMap[row.username]) {
@@ -114,7 +125,6 @@ async function loadAllRecords() {
                 userDrawsMap[row.username].push(row.draw_name);
             });
 
-            // 还原 draw.js 里的计算算法
             for (const user in userDrawsMap) {
                 const draws = userDrawsMap[user];
                 const freeCost = userFreeCostMap[user];
@@ -146,26 +156,30 @@ async function loadAllRecords() {
 
                     if (!shouldUnderline) {
                         validDrawCount++;
+                    } else {
+                        // 只要发生过免计费，就记录该用户需要打星号
+                        drawStarUsers.add(user);
                     }
                 }
-                // 套用原公式
                 drawCosts[user] = Math.pow(2, validDrawCount + 1) - 2;
             }
         }
 
 
         // ================= 4. 合并与渲染 =================
-        // 获取所有出现过的用户 (Set去重)
         const allUsers = new Set([...Object.keys(packageCosts), ...Object.keys(drawCosts)]);
         const records = [];
 
         allUsers.forEach(user => {
             const pCost = packageCosts[user] || 0;
             const dCost = drawCosts[user] || 0;
+            
             records.push({
                 username: user,
                 pkgCost: pCost,
                 drawCost: dCost,
+                pStar: pkgStarUsers.has(user) ? "*" : "",
+                dStar: drawStarUsers.has(user) ? "*" : "",
                 total: pCost + dCost
             });
         });
@@ -173,7 +187,6 @@ async function loadAllRecords() {
         // 按用户名拼音或字母顺序排列
         records.sort((a, b) => a.username.localeCompare(b.username, 'zh-CN'));
 
-        // 生成 HTML 并推入表格
         const tbody = document.getElementById("records-tbody");
         let htmlContent = "";
         
@@ -181,11 +194,12 @@ async function loadAllRecords() {
             htmlContent = `<tr><td colspan="4">暂无任何花费记录</td></tr>`;
         } else {
             records.forEach(r => {
+                // 为了视觉上更清晰，给星号加上了红色的醒目样式
                 htmlContent += `
                     <tr>
                         <td>${r.username}</td>
-                        <td>${r.pkgCost}</td>
-                        <td>${r.drawCost}</td>
+                        <td>${r.pkgCost}<span style="color: #d32f2f; font-weight: bold; margin-left: 2px;">${r.pStar}</span></td>
+                        <td>${r.drawCost}<span style="color: #d32f2f; font-weight: bold; margin-left: 2px;">${r.dStar}</span></td>
                         <td class="cost-total">${r.total}</td>
                     </tr>
                 `;
@@ -194,7 +208,6 @@ async function loadAllRecords() {
 
         tbody.innerHTML = htmlContent;
         
-        // 隐藏加载提示，显示表格
         document.getElementById("loading-text").style.display = "none";
         document.getElementById("records-table").style.display = "table";
 

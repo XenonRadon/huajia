@@ -27,6 +27,14 @@ window.onload = async () => {
     // 设置UI显示
     document.getElementById("current-user-display").innerText = `(当前操作人: ${currentUser})`;
 
+    // === 新增：如果用户是 OB，隐藏“抽！”按钮以及旁边的所有功能 ===
+    if (currentUser === 'OB') {
+        const drawBtn = document.getElementById("draw-btn");
+        if (drawBtn && drawBtn.parentElement) {
+            drawBtn.parentElement.style.display = "none";
+        }
+    }
+
     // 初始化数据
     await fetchOptions(); 
     await fetchUserBanStatus(); 
