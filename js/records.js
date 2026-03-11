@@ -45,7 +45,7 @@ async function loadAllRecords() {
         // 读取培养包记录
         const { data: pkgData, error: pkgError } = await supabaseClient
             .from('package_history')
-            .select('username, package_index');
+            .select('username, package_index, is_free');
         if (pkgError) throw pkgError;
 
         // 读取外籍抽签记录（按时间严格排序，否则免费判定会算错）
@@ -71,16 +71,16 @@ async function loadAllRecords() {
         // ================= 2. 计算【培养包花费】 =================
         const packageCosts = {};
         if (pkgData) {
-            const maxPkgIndexMap = {};
-            // 找出每个用户抽到的最大包序号
+            const paidPkgCountMap = {};
+            // 统计每个用户【非免费】的包的数量
             pkgData.forEach(row => {
-                if (!maxPkgIndexMap[row.username] || row.package_index > maxPkgIndexMap[row.username]) {
-                    maxPkgIndexMap[row.username] = row.package_index;
+                if (!row.is_free) {
+                    paidPkgCountMap[row.username] = (paidPkgCountMap[row.username] || 0) + 1;
                 }
             });
-            // 计算花费：2.5 * N * (N + 1)
-            for (const user in maxPkgIndexMap) {
-                const n = Math.floor(maxPkgIndexMap[user] / 5);
+            // 计算花费：2.5 * N * (N + 1)，N 是付费包除以 5
+            for (const user in paidPkgCountMap) {
+                const n = Math.floor(paidPkgCountMap[user] / 5);
                 packageCosts[user] = n > 0 ? (2.5 * n * (n + 1)) : 0;
             }
         }
@@ -170,8 +170,8 @@ async function loadAllRecords() {
             });
         });
 
-        // 按总花费降序排列（花钱多的排在上面）
-        records.sort((a, b) => b.total - a.total);
+        // 按用户名拼音或字母顺序排列
+        records.sort((a, b) => a.username.localeCompare(b.username, 'zh-CN'));
 
         // 生成 HTML 并推入表格
         const tbody = document.getElementById("records-tbody");
