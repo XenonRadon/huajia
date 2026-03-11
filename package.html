@@ -52,6 +52,21 @@
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
+<div id="ext-modal-overlay" class="modal-overlay">
+        <div class="modal-box" style="text-align: left;">
+            <p style="text-align: center;">扩展功能</p>
+            <div style="margin-bottom: 20px; font-size: 18px;">
+                <label style="cursor: pointer;">
+                    <input type="checkbox" id="chk-double-ssr" style="width: 18px; height: 18px; vertical-align: middle;"> 
+                    <span style="vertical-align: middle;">双SSR之前免费</span>
+                </label>
+            </div>
+            <div style="text-align: center;">
+                <button class="modal-btn btn-yes" onclick="saveExtFeatures()">确定</button>
+                <button class="modal-btn btn-no" onclick="hideExtModal()">取消</button>
+            </div>
+        </div>
+    </div>
 <body>
     <div style="text-align: left; padding: 10px 20px;">
         <button class="small-btn" onclick="window.location.href='menu.html'">← 返回主菜单</button>
@@ -61,10 +76,18 @@
         <h1>抽培养包 
             <span id="current-user-display" style="font-size: 20px; color: #1976d2; font-weight: normal; margin-left: 10px;"></span>
         </h1>
-        
-        <div style="margin-top: 20px; position: relative; display: inline-block;">
+		
+		<div style="margin-top: 20px; position: relative; display: inline-block;">
             <button class="main-btn" id="draw-pkg-btn" onclick="drawPackages()">抽！</button>
-            <span id="total-cost-display" style="color: rgb(255, 0, 0); position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 15px; font-size: 18px; white-space: nowrap; display: none;"></span>
+            <div style="position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 20px; display: flex; align-items: center; white-space: nowrap;">
+                <button class="main-btn btn-ext" id="ext-btn" onclick="showExtModal()" style="margin: 0; padding: 12px 20px;">扩展功能</button>
+                <span id="total-cost-display" style="color: rgb(255, 0, 0); font-size: 18px; margin-left: 15px; display: none;"></span>
+            </div>
+        </div>
+
+        <div id="ext-display-area" style="margin-top: 25px; font-size: 18px; font-weight: bold; min-height: 40px;">
+            <div id="ext-double-ssr-display" style="display: none; margin: 5px 15px; padding: 8px 15px; background-color: #ffebee; color: #c62828; border-radius: 8px; border: 1px solid #ffcdd2;">
+                </div>
         </div>
 
         <div id="initial-hint" style="color: #888; margin-top: 20px;">点击上方按钮抽取培养包</div>
