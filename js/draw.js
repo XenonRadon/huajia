@@ -27,11 +27,16 @@ window.onload = async () => {
     // 设置UI显示
     document.getElementById("current-user-display").innerText = `(当前操作人: ${currentUser})`;
 
-    // === 新增：如果用户是 OB，隐藏“抽！”按钮以及旁边的所有功能 ===
+    // === 新增：如果用户是 OB，隐藏“抽！”按钮以及旁边的所有功能，并显示下载按钮 ===
     if (currentUser === 'OB') {
         const drawBtn = document.getElementById("draw-btn");
         if (drawBtn && drawBtn.parentElement) {
             drawBtn.parentElement.style.display = "none";
+        }
+
+        const obDownloadArea = document.getElementById("ob-download-area");
+        if (obDownloadArea) {
+            obDownloadArea.style.display = "block";
         }
     }
 
@@ -48,6 +53,92 @@ window.onload = async () => {
 };
 
 // ... 下面继续粘贴你原先的 fetchOptions、fetchHistory、confirmDraw 等函数 ...
+
+async function downloadDrawHistoryAsXls() {
+    if (currentUser !== 'OB') {
+        alert('仅 OB 用户可下载文档。');
+        return;
+    }
+
+    const downloadBtn = document.getElementById('download-doc-btn');
+    if (downloadBtn) {
+        downloadBtn.disabled = true;
+        downloadBtn.innerText = '生成中...';
+    }
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('draw_history')
+            .select('username, draw_name, created_at')
+            .order('username', { ascending: true })
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            throw error;
+        }
+
+        const rows = data || [];
+        let tableRows = '';
+
+        rows.forEach((row, index) => {
+            const drawTime = row.created_at ? new Date(row.created_at).toLocaleString('zh-CN') : '';
+            tableRows += `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${(row.username || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+                    <td>${(row.draw_name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+                    <td>${drawTime}</td>
+                </tr>
+            `;
+        });
+
+        if (!tableRows) {
+            tableRows = `<tr><td colspan="4">暂无抽取记录</td></tr>`;
+        }
+
+        const html = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+            <head>
+                <meta charset="UTF-8" />
+            </head>
+            <body>
+                <table border="1">
+                    <thead>
+                        <tr>
+                            <th>序号</th>
+                            <th>玩家</th>
+                            <th>抽取内容</th>
+                            <th>抽取时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </body>
+            </html>
+        `;
+
+        const blob = new Blob(["﻿" + html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `所有玩家抽取记录_${new Date().toISOString().slice(0, 10)}.xls`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error('下载抽取记录失败:', err);
+        alert('下载失败，请稍后重试。');
+    } finally {
+        if (downloadBtn) {
+            downloadBtn.disabled = false;
+            downloadBtn.innerText = '下载文档';
+        }
+    }
+}
+
 async function fetchOptions() {
             const { data, error } = await supabaseClient
                 .from('characters_pool') 
