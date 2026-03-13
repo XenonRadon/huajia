@@ -13,6 +13,9 @@ let movesDataMap = {};
 let pkgDoubleSsrActive = false;
 let pkgDoubleSsrEnded = false;
 
+// === 新增：用于存储原始数据库记录，供导出 Excel 使用 ===
+let globalPackageHistory = []; 
+
 // 页面加载初始化
 window.onload = async () => {
     if (!currentUser) {
@@ -24,7 +27,7 @@ window.onload = async () => {
     // 设置UI显示当前操作人
     document.getElementById("current-user-display").innerText = `(当前操作人: ${currentUser})`;
 
-    // === 新增：OB 视角专属 UI 处理 ===
+    // OB 视角专属 UI 处理
     if (currentUser === 'OB') {
         const drawControls = document.getElementById("draw-pkg-btn")?.parentElement;
         if (drawControls) drawControls.style.display = "none"; // 隐藏抽卡和扩展功能按钮
@@ -38,6 +41,11 @@ window.onload = async () => {
             hintMsg.style.color = "#1976d2";
             hintMsg.style.fontWeight = "bold";
         }
+
+        // 显示下载 Excel 按钮
+        const downloadBtn = document.getElementById("download-excel-btn");
+        if (downloadBtn) downloadBtn.style.display = "inline-block";
+        
     } else {
         // 普通用户锁定抽取按钮，防止数据没读完就点击
         const drawBtn = document.getElementById("draw-pkg-btn");
@@ -51,7 +59,7 @@ window.onload = async () => {
     await fetchCurrentSeason();
     await fetchMovesData();
     if (currentUser !== 'OB') {
-        await fetchUserBanStatus(); // OB 不需要读取扩展功能状态
+        await fetchUserBanStatus(); 
     }
     await loadPackageHistory();
 
@@ -203,7 +211,6 @@ async function loadPackageHistory() {
     try {
         let query = supabaseClient.from('package_history').select('*');
         if (currentUser === 'OB') {
-            // 【修改排序】：先按用户名排序（把同一个人的聚在一起），再按 id 排序（保证同一人的包按时间先后排列）
             query = query.order('username', { ascending: true }).order('id', { ascending: true }); 
         } else {
             query = query.eq('username', currentUser).order('package_index', { ascending: true });
@@ -216,6 +223,8 @@ async function loadPackageHistory() {
             throw error;
         }
 
+        // 把数据库返回的记录存入全局变量供导出Excel使用
+        globalPackageHistory = data || [];
         paidPackagesCount = 0; 
 
         if (data && data.length > 0) {
@@ -378,5 +387,93 @@ async function drawPackages() {
     } finally {
         drawBtn.disabled = false;
         drawBtn.innerText = originalBtnText;
+    }
+}
+
+// =========================================
+// 4. 导出 Excel 逻辑 (定制化格式)
+// =========================================
+function exportToExcel() {
+    if (!globalPackageHistory || globalPackageHistory.length === 0) {
+        alert("当前没有可下载的数据！");
+        return;
+    }
+
+    try {
+        // 1. 将数据按用户归类
+        const userMap = {};
+        globalPackageHistory.forEach(pkg => {
+            const user = pkg.username || '未知用户';
+            if (!userMap[user]) userMap[user] = [];
+
+            let itemsArray = pkg.items;
+            if (typeof itemsArray === 'string') {
+                try { itemsArray = JSON.parse(itemsArray); } catch (e) { itemsArray = []; }
+            }
+            userMap[user].push(itemsArray);
+        });
+
+        const users = Object.keys(userMap); // 获取所有有记录的用户名
+
+        // 2. 构建二维数组 (AoA)，每个用户占据并排的 2 列
+        const aoa = [];
+        
+        // --- 第1行：写入所有用户的名字（在每个用户的第1列） ---
+        const headerRow = [];
+        users.forEach(user => {
+            headerRow.push(user); // 每人的左列写名字
+            headerRow.push("");   // 每人的右列留空
+        });
+        aoa.push(headerRow);
+
+        // 获取历史记录中最多的包数量，确定向下要循环几次
+        let maxPackages = 0;
+        users.forEach(user => {
+            if (userMap[user].length > maxPackages) {
+                maxPackages = userMap[user].length;
+            }
+        });
+
+        // --- 从第2行起：逐包输出，每包 6 行，包之间空 1 行 ---
+        for (let pIdx = 0; pIdx < maxPackages; pIdx++) {
+            
+            // 每一个包固定产生 6 行记录
+            for (let i = 0; i < 6; i++) {
+                const row = [];
+                users.forEach(user => {
+                    const pkgs = userMap[user];
+                    // 检查该用户是否有第 pIdx 个包，以及包里是否有第 i 行数据
+                    if (pIdx < pkgs.length && pkgs[pIdx][i]) {
+                        row.push(pkgs[pIdx][i].type || "-");
+                        row.push(pkgs[pIdx][i].content || "-");
+                    } else {
+                        // 如果用户这包没抽或者数据缺失，补全 2 个空白列，对齐格式
+                        row.push("");
+                        row.push("");
+                    }
+                });
+                aoa.push(row);
+            }
+            
+            // 每输出完一包，如果还不是最后一包，则额外增加一个空行
+            if (pIdx < maxPackages - 1) {
+                const emptyRow = new Array(users.length * 2).fill("");
+                aoa.push(emptyRow);
+            }
+        }
+
+        // 3. 将二维数组转换为工作表
+        const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+        
+        // 4. 创建工作簿并触发下载
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "培养包记录");
+        
+        const fileName = `${currentSeason}_所有用户培养包记录.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+
+    } catch (error) {
+        console.error("导出 Excel 失败:", error);
+        alert("导出失败，请检查浏览器是否拦截了下载！");
     }
 }
