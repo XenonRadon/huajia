@@ -10,11 +10,25 @@ window.onload = async () => {
 
     document.getElementById("current-user-display").innerText = `(当前操作人: ${currentUser})`;
 
-    if (currentUser === 'OB') {
+    if (currentUser === 'bidGM') {
+        // bidGM 视角：隐藏填报区域，显示数据与结算表格区域
         document.getElementById("user-view").style.display = "none";
         document.getElementById("ob-view").style.display = "block";
         await loadAllBids();
+    } else if (currentUser === 'OB') {
+        // OB 视角：什么都不显示，并给出一句提示
+        document.getElementById("user-view").style.display = "none";
+        document.getElementById("ob-view").style.display = "none";
+        
+        const hintDiv = document.createElement("div");
+        hintDiv.style.marginTop = "60px";
+        hintDiv.style.fontSize = "20px";
+        hintDiv.style.color = "#888";
+        hintDiv.style.fontWeight = "bold";
+        hintDiv.innerText = "【OB】用户无法参与暗标，且无权查看暗标详情（结算权限仅限 bidGM 账号）。";
+        document.getElementById("user-view").parentNode.appendChild(hintDiv);
     } else {
+        // 普通用户视角：显示填报区域，读取历史填报记录
         document.getElementById("user-view").style.display = "block";
         document.getElementById("ob-view").style.display = "none";
         await loadUserBid();
@@ -117,7 +131,7 @@ async function submitBid() {
 }
 
 // ==========================================
-// OB 功能：加载所有人暗标数据
+// GM 功能：加载所有人暗标数据
 // ==========================================
 async function loadAllBids() {
     const tbody = document.getElementById("ob-tbody");
@@ -154,13 +168,13 @@ async function loadAllBids() {
             tbody.innerHTML = "<tr><td colspan='5'>暂无任何人提交暗标</td></tr>";
         }
     } catch (err) {
-        console.error("OB加载数据失败:", err);
+        console.error("GM加载数据失败:", err);
         tbody.innerHTML = "<tr><td colspan='5' style='color: red;'>加载数据失败，请检查数据库权限或配置。</td></tr>";
     }
 }
 
 // ==========================================
-// OB 功能：结算暗标核心逻辑
+// GM 功能：结算暗标核心逻辑
 // ==========================================
 function settleBids() {
     if (allBidsData.length === 0) {
@@ -197,13 +211,12 @@ function settleBids() {
                 username: bid.username,
                 bid: currentBid,
                 round: round,
-                updated_at: bid.updated_at // === 新增：将提交时间传入候选人信息中 ===
+                updated_at: bid.updated_at
             });
         });
 
-        // 针对每个选项，对候选人按出价进行排序，并填充剩余名额
+        // 针对每个选项，对候选人按出价和时间进行排序，并填充剩余名额
         ['A', 'B', 'C'].forEach(item => {
-            // === 修改：复合排序逻辑 ===
             candidates[item].sort((a, b) => {
                 if (b.bid !== a.bid) {
                     // 1. 首要条件：出价高的优先（降序）
@@ -239,14 +252,12 @@ function settleBids() {
 
         let html = "";
         results[item].forEach(user => {
-            // 根据录取的轮次，给予不同的左侧边框颜色
             html += `<div class="admit-item round-${user.round}">
                         <strong>${user.username}</strong> 
                         <span style="color: #666; font-size: 14px; margin-left: 5px;">(出价: ${user.bid})</span>
                      </div>`;
         });
         
-        // 补齐空位占位符，方便查看还有多少名额
         const emptySpots = MAX_QUOTA - results[item].length;
         for (let i = 0; i < emptySpots; i++) {
             html += `<div class="admit-item" style="background: transparent; border: 1px dashed #ccc; color: #aaa;">空位</div>`;
