@@ -51,8 +51,15 @@
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 </head>
-<div id="ext-modal-overlay" class="modal-overlay">
+<body>
+    <div style="text-align: left; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center;">
+        <button class="small-btn" onclick="window.location.href='menu.html'">← 返回主菜单</button>
+        <button class="small-btn btn-ext" id="download-excel-btn" style="display: none;" onclick="exportToExcel()">下载Excel表格</button>
+    </div>
+
+    <div id="ext-modal-overlay" class="modal-overlay">
         <div class="modal-box" style="text-align: left;">
             <p style="text-align: center;">扩展功能</p>
             <div style="margin-bottom: 20px; font-size: 18px;">
@@ -66,10 +73,6 @@
                 <button class="modal-btn btn-no" onclick="hideExtModal()">取消</button>
             </div>
         </div>
-    </div>
-<body>
-    <div style="text-align: left; padding: 10px 20px;">
-        <button class="small-btn" onclick="window.location.href='menu.html'">← 返回主菜单</button>
     </div>
 
     <div id="package-section">
@@ -87,7 +90,7 @@
 
         <div id="ext-display-area" style="margin-top: 25px; font-size: 18px; font-weight: bold; min-height: 40px;">
             <div id="ext-double-ssr-display" style="display: none; margin: 5px 15px; padding: 8px 15px; background-color: #ffebee; color: #c62828; border-radius: 8px; border: 1px solid #ffcdd2;">
-                </div>
+            </div>
         </div>
 
         <div id="initial-hint" style="color: #888; margin-top: 20px;">点击上方按钮抽取培养包</div>

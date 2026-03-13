@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>暗标系统</title>
+    <link rel="stylesheet" href="css/common.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        .bid-row { margin-bottom: 15px; font-size: 18px; }
+        .bid-select { width: 100px; padding: 5px; font-size: 16px; margin-right: 15px; }
+        .bid-input { width: 120px; padding: 5px; font-size: 16px; }
+        .records-table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .records-table th, .records-table td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+        .records-table th { background-color: #1976d2; color: white; }
+        
+        /* 结算大弹窗专属样式 */
+        .settle-modal-box {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 1000px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .result-table th, .result-table td {
+            border: 2px solid #ddd;
+            padding: 12px;
+            text-align: center;
+            vertical-align: top;
+            width: 33.33%;
+        }
+        .result-table th {
+            background-color: #1565c0;
+            color: white;
+            font-size: 20px;
+        }
+        .admit-item {
+            padding: 8px;
+            margin-bottom: 5px;
+            background-color: #f1f8e9;
+            border: 1px solid #c5e1a5;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .round-1 { border-left: 4px solid #d32f2f; }
+        .round-2 { border-left: 4px solid #ff9800; }
+        .round-3 { border-left: 4px solid #388e3c; }
+    </style>
+</head>
+<body>
+    <div style="text-align: left; padding: 10px 20px;">
+        <button class="small-btn" onclick="window.location.href='menu.html'">← 返回主菜单</button>
+    </div>
+
+    <div style="width: 90%; max-width: 800px; margin: 0 auto; text-align: center;">
+        <h1>暗标系统 
+            <span id="current-user-display" style="font-size: 20px; color: #1976d2; font-weight: normal; margin-left: 10px;"></span>
+        </h1>
+
+        <div id="user-view" style="display: none; background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #ddd; margin-top: 20px;">
+            <p style="color: #666; margin-bottom: 20px;">请分别选择第一、二、三志愿（不可重复），并填写整数出价。</p>
+            
+            <div class="bid-row">
+                <span style="font-weight: bold; color: #d32f2f;">第一志愿：</span>
+                <select id="choice-1" class="bid-select">
+                    <option value="" disabled selected>选择</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                </select>
+                出价：<input type="number" id="bid-1" class="bid-input" step="1" placeholder="填入整数">
+            </div>
+
+            <div class="bid-row">
+                <span style="font-weight: bold; color: #ff9800;">第二志愿：</span>
+                <select id="choice-2" class="bid-select">
+                    <option value="" disabled selected>选择</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                </select>
+                出价：<input type="number" id="bid-2" class="bid-input" step="1" placeholder="填入整数">
+            </div>
+
+            <div class="bid-row">
+                <span style="font-weight: bold; color: #388e3c;">第三志愿：</span>
+                <select id="choice-3" class="bid-select">
+                    <option value="" disabled selected>选择</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                </select>
+                出价：<input type="number" id="bid-3" class="bid-input" step="1" placeholder="填入整数">
+            </div>
+
+            <div style="margin-top: 30px;">
+                <button class="main-btn" id="submit-btn" onclick="submitBid()">提交暗标</button>
+                <div id="status-msg" style="margin-top: 15px; font-weight: bold;"></div>
+            </div>
+        </div>
+
+        <div id="ob-view" style="display: none; margin-top: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <button class="main-btn btn-ext" onclick="settleBids()" style="margin: 0; padding: 10px 20px; font-size: 16px;">结算暗标</button>
+                <button class="small-btn" onclick="loadAllBids()" style="margin: 0;">刷新数据</button>
+            </div>
+            <table class="records-table">
+                <thead>
+                    <tr>
+                        <th>用户</th>
+                        <th>第一志愿 (出价)</th>
+                        <th>第二志愿 (出价)</th>
+                        <th>第三志愿 (出价)</th>
+                        <th>更新时间</th>
+                    </tr>
+                </thead>
+                <tbody id="ob-tbody">
+                    <tr><td colspan="5">读取数据中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="settle-modal-overlay" class="modal-overlay">
+        <div class="settle-modal-box">
+            <h2 style="color: #1976d2; margin-top: 0;">暗标结算结果（名额: 8人/组）</h2>
+            <div style="font-size: 14px; color: #666; margin-bottom: 15px; text-align: left;">
+                <span style="border-left: 4px solid #d32f2f; padding-left: 5px; margin-right: 15px;">红边：第一志愿</span>
+                <span style="border-left: 4px solid #ff9800; padding-left: 5px; margin-right: 15px;">橙边：第二志愿</span>
+                <span style="border-left: 4px solid #388e3c; padding-left: 5px;">绿边：第三志愿</span>
+            </div>
+            <table class="result-table">
+                <thead>
+                    <tr>
+                        <th>A</th>
+                        <th>B</th>
+                        <th>C</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td id="result-A"></td>
+                        <td id="result-B"></td>
+                        <td id="result-C"></td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div id="unadmitted-container" style="display: none; margin-top: 20px; text-align: left; padding: 10px; background: #ffebee; border: 1px solid #ffcdd2; border-radius: 4px;">
+                <strong style="color: #c62828;">落榜用户：</strong>
+                <span id="unadmitted-users"></span>
+            </div>
+
+            <div style="margin-top: 30px; text-align: center;">
+                <button class="main-btn btn-no" onclick="closeSettleModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/supabase-init.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/bid.js"></script>
+</body>
+</html>
