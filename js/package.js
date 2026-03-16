@@ -9,10 +9,6 @@ let paidPackagesCount = 0;
 let currentSeason = "未知赛季";
 let movesDataMap = {};
 
-// 扩展功能状态
-let pkgDoubleSsrActive = false;
-let pkgDoubleSsrEnded = false;
-
 // === 新增：用于存储原始数据库记录，供导出 Excel 使用 ===
 let globalPackageHistory = []; 
 
@@ -79,17 +75,18 @@ window.onload = async () => {
 // =========================================
 // 1. 扩展功能相关逻辑
 // =========================================
+let pkgGuaranteedSsrActive = false;
+
 async function fetchUserBanStatus() {
     try {
         const { data, error } = await supabaseClient
             .from('user_ban_status')
-            .select('pkg_double_ssr_active, pkg_double_ssr_ended')
+            .select('pkg_guaranteed_ssr_active')
             .eq('username', currentUser)
             .maybeSingle();
 
         if (data) {
-            pkgDoubleSsrActive = data.pkg_double_ssr_active || false;
-            pkgDoubleSsrEnded = data.pkg_double_ssr_ended || false;
+            pkgGuaranteedSsrActive = data.pkg_guaranteed_ssr_active || false;
         }
     } catch (e) {
         console.error("读取扩展功能状态失败:", e);
@@ -97,10 +94,11 @@ async function fetchUserBanStatus() {
 }
 
 function showExtModal() {
-    const chk = document.getElementById("chk-double-ssr");
-    chk.checked = pkgDoubleSsrActive;
+    const chk = document.getElementById("chk-guaranteed-ssr");
+    chk.checked = pkgGuaranteedSsrActive;
     
-    if (totalPackagesDrawn > 0 || pkgDoubleSsrEnded) {
+    // 如果已经抽过（不论抽了几包），该选项即被锁定
+    if (totalPackagesDrawn > 0) {
         chk.disabled = true;
     } else {
         chk.disabled = false;
@@ -114,13 +112,13 @@ function hideExtModal() {
 }
 
 async function saveExtFeatures() {
-    const chk = document.getElementById("chk-double-ssr");
+    const chk = document.getElementById("chk-guaranteed-ssr");
     if (!chk.disabled) {
-        if (chk.checked !== pkgDoubleSsrActive) {
-            pkgDoubleSsrActive = chk.checked;
+        if (chk.checked !== pkgGuaranteedSsrActive) {
+            pkgGuaranteedSsrActive = chk.checked;
             await supabaseClient.from('user_ban_status').upsert([{
                 username: currentUser,
-                pkg_double_ssr_active: pkgDoubleSsrActive
+                pkg_guaranteed_ssr_active: pkgGuaranteedSsrActive
             }]);
         }
     }
@@ -129,18 +127,16 @@ async function saveExtFeatures() {
 }
 
 function updateExtDisplay() {
-    const displayBox = document.getElementById("ext-double-ssr-display");
+    const displayBox = document.getElementById("ext-guaranteed-ssr-display");
     if (!displayBox) return; 
     
-    if (pkgDoubleSsrActive) {
+    if (pkgGuaranteedSsrActive) {
         displayBox.style.display = "inline-block";
         
-        if (pkgDoubleSsrEnded) {
-            displayBox.innerHTML = '双SSR之前免费 <span style="font-size: 14px; font-weight: normal; color: #888; margin-left: 5px;">(已失效)</span>';
-        } else if (totalPackagesDrawn > 0) {
-            displayBox.innerHTML = '已开启：双SSR之前免费 <span style="font-size: 14px; font-weight: normal; color: #888; margin-left: 5px;">(已锁定)</span>';
+        if (totalPackagesDrawn > 0) {
+            displayBox.innerHTML = '首抽必定4个SSR <span style="font-size: 14px; font-weight: normal; color: #888; margin-left: 5px;">(已生效)</span>';
         } else {
-            displayBox.innerHTML = '已开启：双SSR之前免费 <button class="small-btn" style="padding: 2px 8px; margin-left: 10px; font-size: 14px; color: #333; border-color: #ccc; background-color: #eee;" onclick="clearExtFeature()">取消</button>';
+            displayBox.innerHTML = '首抽必定4个SSR <button class="small-btn" style="padding: 2px 8px; margin-left: 10px; font-size: 14px; color: #333; border-color: #ccc; background-color: #eee;" onclick="clearExtFeature()">取消</button>';
         }
     } else {
         displayBox.style.display = "none";
@@ -148,10 +144,10 @@ function updateExtDisplay() {
 }
 
 async function clearExtFeature() {
-    pkgDoubleSsrActive = false;
+    pkgGuaranteedSsrActive = false;
     await supabaseClient.from('user_ban_status').upsert([{
         username: currentUser,
-        pkg_double_ssr_active: false
+        pkg_guaranteed_ssr_active: false
     }]);
     updateExtDisplay();
 }
@@ -223,7 +219,6 @@ async function loadPackageHistory() {
             throw error;
         }
 
-        // 把数据库返回的记录存入全局变量供导出Excel使用
         globalPackageHistory = data || [];
         paidPackagesCount = 0; 
 
@@ -233,17 +228,16 @@ async function loadPackageHistory() {
             data.forEach(pkg => {
                 if (currentUser !== 'OB') {
                     totalPackagesDrawn = Math.max(totalPackagesDrawn, pkg.package_index || 0); 
-                    if (!pkg.is_free) {
-                        paidPackagesCount++; 
-                    }
+                    paidPackagesCount++; // 移除了is_free的判断，现在所有包都计费
                 }
                 
-                const freeText = pkg.is_free ? "（免费）" : "";
+                // 动态显示增强包标签
+                let tagText = pkg.is_enhanced ? "（增强）" : "";
                 const displayUser = pkg.username || currentUser;
                 
                 htmlContent += `
                     <div class="package-box">
-                        <div class="package-title">${displayUser}-${pkg.season}-第${pkg.package_index}包<span style="color: #4CAF50;">${freeText}</span></div>
+                        <div class="package-title">${displayUser}-${pkg.season}-第${pkg.package_index}包<span style="color: #4CAF50;">${tagText}</span></div>
                         <table class="package-table">
                             <tbody>
                 `;
@@ -280,15 +274,52 @@ async function drawPackages() {
     if (hintMsg) hintMsg.style.display = "none";
     drawBtn.disabled = true;
     const originalBtnText = drawBtn.innerText;
-    drawBtn.innerText = "生成并保存中...";
+    drawBtn.innerText = "生成并结算中...";
 
     try {
-        const randomNums = new Set();
-        while (randomNums.size < 30) {
-            randomNums.add(Math.floor(Math.random() * 600) + 1);
-        }
-        const numList = Array.from(randomNums);
+        // 先读取全库的类型，用于内存中高速重抽结算
+        const { data: allPkgs, error: allErr } = await supabaseClient.from('packages').select('num, type');
+        if (allErr) throw allErr;
+        const typeMap = {};
+        allPkgs.forEach(p => typeMap[p.num] = p.type);
 
+        let isEnhanced = false;
+        // 只有开启了扩展功能，并且是前 5 包（当前0包）时，才触发必定4个SSR
+        if (pkgGuaranteedSsrActive && totalPackagesDrawn === 0) {
+            isEnhanced = true;
+        }
+
+        let numList = [];
+        let loopSafety = 0;
+        
+        // 在内存中不断生成 30 个随机数，直到满足条件
+        while (loopSafety < 5000) {
+            loopSafety++;
+            const randomNums = new Set();
+            while (randomNums.size < 30) {
+                randomNums.add(Math.floor(Math.random() * 600) + 1);
+            }
+            numList = Array.from(randomNums);
+
+            if (isEnhanced) {
+                let ssrCount = 0;
+                for (let num of numList) {
+                    if (typeMap[num] && typeMap[num].includes('SSR')) {
+                        ssrCount++;
+                    }
+                }
+                // 满足4个SSR即生效退出重抽
+                if (ssrCount >= 4) break; 
+            } else {
+                break; 
+            }
+        }
+
+        if (loopSafety >= 5000) {
+            throw new Error("卡池异常，无法抽出符合条件的包，请检查配置。");
+        }
+
+        // 仅抓取这最终确定的 30 个包的详细信息
         const { data, error } = await supabaseClient
             .from('packages')
             .select('num, type, content, pick, move_JQ, move_SM, move_CQ, move_FS, move_MJ, DNFG')
@@ -299,42 +330,19 @@ async function drawPackages() {
         const dataMap = {};
         if (data) data.forEach(item => { dataMap[item.num] = item; });
 
-        let ssrCount = 0;
-        for (let num of numList) {
-            const rowData = dataMap[num];
-            if (rowData && rowData.type && rowData.type.includes('SSR')) {
-                ssrCount++;
-            }
-        }
-
-        let isBatchFree = false;
-        if (pkgDoubleSsrActive && !pkgDoubleSsrEnded) {
-            if (ssrCount <= 1) {
-                isBatchFree = true;
-            } else {
-                isBatchFree = false;
-                pkgDoubleSsrEnded = true;
-                await supabaseClient.from('user_ban_status').upsert([{
-                    username: currentUser,
-                    pkg_double_ssr_active: true,
-                    pkg_double_ssr_ended: true
-                }]);
-            }
-        }
-
         let htmlContent = "";
         let newPackagesToSave = []; 
         
         for (let i = 0; i < 5; i++) {
             totalPackagesDrawn++; 
-            if (!isBatchFree) paidPackagesCount++; 
+            paidPackagesCount++; 
             
             let currentPackageItems = []; 
-            const freeText = isBatchFree ? "（免费）" : "";
+            const tagText = isEnhanced ? "（增强）" : "";
             
             htmlContent += `
                 <div class="package-box">
-                    <div class="package-title">${currentUser}-${currentSeason}-第${totalPackagesDrawn}包<span style="color: #4CAF50;">${freeText}</span></div>
+                    <div class="package-title">${currentUser}-${currentSeason}-第${totalPackagesDrawn}包<span style="color: #4CAF50;">${tagText}</span></div>
                     <table class="package-table">
                         <tbody>
             `;
@@ -366,14 +374,14 @@ async function drawPackages() {
                 season: currentSeason,
                 package_index: totalPackagesDrawn,
                 items: currentPackageItems,
-                is_free: isBatchFree 
+                is_enhanced: isEnhanced  // 只记录增强包字段，不再写入 is_free
             });
         }
 
         const { error: insertError } = await supabaseClient.from('package_history').insert(newPackagesToSave);
         if (insertError) {
             totalPackagesDrawn -= 5; 
-            if (!isBatchFree) paidPackagesCount -= 5;
+            paidPackagesCount -= 5;
             throw insertError;
         }
 
@@ -383,7 +391,7 @@ async function drawPackages() {
 
     } catch (err) {
         console.error("生成或保存失败:", err);
-        alert("操作失败！可能是网络或数据库配置错误。");
+        alert("操作失败！可能是网络或数据库配置错误。详细信息：" + err.message);
     } finally {
         drawBtn.disabled = false;
         drawBtn.innerText = originalBtnText;

@@ -42,10 +42,10 @@ async function fetchCurrentSeason() {
 async function loadAllRecords() {
     try {
         // ================= 1. 读取所有的必须数据 =================
-        // 读取培养包记录 (加上 is_free 字段以便判断是否使用过扩展功能)
+        // 读取培养包记录 (移除了与旧免费/增强星号相关的所有字段)
         const { data: pkgData, error: pkgError } = await supabaseClient
             .from('package_history')
-            .select('username, package_index, is_free');
+            .select('username, package_index');
         if (pkgError) throw pkgError;
 
         // 读取外籍抽签记录
@@ -68,31 +68,23 @@ async function loadAllRecords() {
         if (banError) throw banError;
 
 
-        // ================= 2. 计算【培养包花费】及星号标记 =================
+        // ================= 2. 计算【培养包花费】 =================
         const packageCosts = {};
-        const pkgStarUsers = new Set(); // 记录享受过双SSR免费的用户
 
         if (pkgData) {
-            const paidPkgCountMap = {};
+            const pkgCountMap = {};
             
             pkgData.forEach(row => {
-                // 初始化防止漏掉只抽了免费包的用户
-                if (paidPkgCountMap[row.username] === undefined) {
-                    paidPkgCountMap[row.username] = 0;
+                if (pkgCountMap[row.username] === undefined) {
+                    pkgCountMap[row.username] = 0;
                 }
-
-                if (row.is_free) {
-                    // 如果有免费包，记录该用户需要打星号
-                    pkgStarUsers.add(row.username);
-                } else {
-                    // 只有付费包才计入数量
-                    paidPkgCountMap[row.username]++;
-                }
+                // 所有包都正常计入数量
+                pkgCountMap[row.username]++;
             });
             
             // 计算花费：2.5 * N * (N + 1)
-            for (const user in paidPkgCountMap) {
-                const n = Math.floor(paidPkgCountMap[user] / 5);
+            for (const user in pkgCountMap) {
+                const n = Math.floor(pkgCountMap[user] / 5);
                 packageCosts[user] = n > 0 ? (2.5 * n * (n + 1)) : 0;
             }
         }
@@ -100,7 +92,7 @@ async function loadAllRecords() {
 
         // ================= 3. 计算【外籍花费】及星号标记 =================
         const drawCosts = {};
-        const drawStarUsers = new Set(); // 记录享受过N费免费的用户
+        const drawStarUsers = new Set(); // 记录享受过外籍N费免费的用户
 
         if (drawData) {
             const charCostMap = {};
@@ -178,7 +170,6 @@ async function loadAllRecords() {
                 username: user,
                 pkgCost: pCost,
                 drawCost: dCost,
-                pStar: pkgStarUsers.has(user) ? "*" : "",
                 dStar: drawStarUsers.has(user) ? "*" : "",
                 total: pCost + dCost
             });
@@ -194,11 +185,10 @@ async function loadAllRecords() {
             htmlContent = `<tr><td colspan="4">暂无任何花费记录</td></tr>`;
         } else {
             records.forEach(r => {
-                // 为了视觉上更清晰，给星号加上了红色的醒目样式
                 htmlContent += `
                     <tr>
                         <td>${r.username}</td>
-                        <td>${r.pkgCost}<span style="color: #d32f2f; font-weight: bold; margin-left: 2px;">${r.pStar}</span></td>
+                        <td>${r.pkgCost}</td>
                         <td>${r.drawCost}<span style="color: #d32f2f; font-weight: bold; margin-left: 2px;">${r.dStar}</span></td>
                         <td class="cost-total">${r.total}</td>
                     </tr>
