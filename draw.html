@@ -21,7 +21,10 @@
         
         <div style="position: relative; display: inline-block;">
             <button class="main-btn" id="draw-btn" onclick="showDrawModal()" disabled>抽！</button>
-            <button class="main-btn btn-ext" id="ext-btn" onclick="showExtModal()" style="position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 20px; white-space: nowrap;">扩展功能</button>
+            <div style="position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 20px; display: flex; align-items: center; white-space: nowrap;">
+                <button class="main-btn btn-ext" id="ext-btn" onclick="showExtModal()" style="margin: 0;">扩展功能</button>
+                <button class="small-btn btn-warning" id="lock-btn" onclick="lockCurrentDraw()" style="margin-left: 10px; display: none; padding: 10px 15px; font-size: 16px;">锁定</button>
+            </div>
         </div>
 
         <div id="ban-display-area">
