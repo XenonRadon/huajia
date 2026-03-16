@@ -1,6 +1,17 @@
 let currentUser = localStorage.getItem('currentUser');
 let allBidsData = []; // 用于保存全局加载的暗标数据，供结算使用
 
+// 这是一个轻量级的字符串 Hash 算法 + 你的专属“盐”
+// ==========================================
+function generateSignature(username, content) {
+    // 你的专属“盐”，务必保密
+    const salt = "Iodine&Thorium&Thulium&Thallium!"; 
+    const str = username + "_" + content + "_" + salt;
+    
+    // 调用 CryptoJS 直接生成 64 位的 SHA-256 顶级哈希签名
+    return CryptoJS.SHA256(str).toString(CryptoJS.enc.Hex);
+}
+
 window.onload = async () => {
     if (!currentUser) {
         alert("请先登录！");
@@ -105,12 +116,21 @@ async function submitBid() {
     msgDiv.innerText = "";
 
     try {
+        // 【关键防御】把时间转化为秒级整数，去掉毫秒误差，用于生成签名和记录时间
+        const timeInt = Math.floor(Date.now() / 1000); 
+        const isoString = new Date(timeInt * 1000).toISOString();
+
+        // 将所有志愿、出价和时间戳拼在一起，只要黑客敢改其中任何一个数字，签名立刻失效！
+        const contentStr = `${c1}_${numB1}_${c2}_${numB2}_${c3}_${numB3}_${timeInt}`;
+        const sign = generateSignature(currentUser, contentStr);
+
         const payload = {
             username: currentUser,
             choice_1: c1, bid_1: numB1,
             choice_2: c2, bid_2: numB2,
             choice_3: c3, bid_3: numB3,
-            updated_at: new Date().toISOString()
+            updated_at: isoString, // 发送标准时间格式给数据库
+            sys_sign: sign         // 把计算好的签名一起发给数据库
         };
 
         const { error } = await supabaseClient.from('blind_bids').upsert([payload]);

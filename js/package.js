@@ -369,12 +369,18 @@ async function drawPackages() {
 
             htmlContent += `</tbody></table></div>`;
 
+            const itemsStr = currentPackageItems.map(i => `${i.type || ''}:${i.content || ''}`).join('|');
+            const contentStr = `${currentSeason}_${totalPackagesDrawn}_${itemsStr}`;
+            const sign = generateSignature(currentUser, contentStr);
+
+            // 2. 把签名放进即将保存的数据字典里
             newPackagesToSave.push({
                 username: currentUser,
                 season: currentSeason,
                 package_index: totalPackagesDrawn,
                 items: currentPackageItems,
-                is_enhanced: isEnhanced  // 只记录增强包字段，不再写入 is_free
+                is_enhanced: isEnhanced,
+                sys_sign: sign   // <==== 加上这一行！
             });
         }
 
@@ -484,4 +490,15 @@ function exportToExcel() {
         console.error("导出 Excel 失败:", error);
         alert("导出失败，请检查浏览器是否拦截了下载！");
     }
+}
+
+// 这是一个轻量级的字符串 Hash 算法 + 你的专属“盐”
+// ==========================================
+function generateSignature(username, content) {
+    // 你的专属“盐”，务必保密
+    const salt = "Iodine&Thorium&Thulium&Thallium!"; 
+    const str = username + "_" + content + "_" + salt;
+    
+    // 调用 CryptoJS 直接生成 64 位的 SHA-256 顶级哈希签名
+    return CryptoJS.SHA256(str).toString(CryptoJS.enc.Hex);
 }

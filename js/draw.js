@@ -417,9 +417,17 @@ async function confirmDraw() {
         drawnName = drawnItem.name; 
     }
 
+    // 1. 先算好签名
+    const sign = generateSignature(currentUser, drawnName);
+
+    // 2. 把签名打包进要发送的数组里
     const { error } = await supabaseClient
         .from('draw_history')
-        .insert([{ username: currentUser, draw_name: drawnName }]);
+        .insert([{ 
+            username: currentUser, 
+            draw_name: drawnName, 
+            sys_sign: sign   // <==== 就是加了这一行！
+        }]);
 
     if (error) {
         console.error("写入抽签记录失败:", error);
@@ -579,4 +587,15 @@ function renderHistory() {
         rowDiv.appendChild(costSpan);
         listDiv.appendChild(rowDiv);
     }
+}
+
+// 这是一个轻量级的字符串 Hash 算法 + 你的专属“盐”
+// ==========================================
+function generateSignature(username, content) {
+    // 你的专属“盐”，务必保密
+    const salt = "Iodine&Thorium&Thulium&Thallium!"; 
+    const str = username + "_" + content + "_" + salt;
+    
+    // 调用 CryptoJS 直接生成 64 位的 SHA-256 顶级哈希签名
+    return CryptoJS.SHA256(str).toString(CryptoJS.enc.Hex);
 }
